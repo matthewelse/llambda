@@ -1,5 +1,6 @@
 (library
  (name llambda)
- (libraries core llvm)
+ (libraries core ocaml-compiler-libs.optcomp ocaml-compiler-libs.common llvm)
+ (inline_tests)
  (preprocess
-  (pps ppx_jane)))
+  (pps ppx_jane ppx_inline_test)))
