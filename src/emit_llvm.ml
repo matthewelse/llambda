@@ -6,7 +6,8 @@ let type_of_machtype ctx (machtype : Cmm.machtype) =
   | [||] -> void_type ctx
   | [| component |] ->
     (match component with
-    | Val | Addr | Int -> i64_type ctx
+    | Val | Addr -> pointer_type (i64_type ctx)
+    | Int -> i64_type ctx
     | Float -> float_type ctx)
   | _ -> assert false
 ;;
@@ -26,6 +27,7 @@ let optype ctx (op : Cmm.operation) =
   | Clsr
   | Casr -> i64_type ctx
   | Cstore _ -> void_type ctx
+  | Ccmpi _ -> i1_type ctx
   | _ -> assert false
 ;;
 
@@ -37,32 +39,56 @@ let rec exprtype ctx (expr : Cmm.expression) =
   | Clet (_, _, body)
   | Clet_mut (_, _, _, body)
   | Cphantom_let (_, _, body)
-  | Csequence (_, body) -> exprtype ctx body
+  | Csequence (_, body)
+  | Cifthenelse (_, _, body, _, _, _) -> exprtype ctx body
   | Cop (op, _, _) -> optype ctx op
   | Cconst_pointer _ ->
     (* TODO melse: this is removed in 4.12 anyway *)
     pointer_type (i64_type ctx)
-  | _ -> assert false
+  | _ ->
+    print_s [%message "error while trying to type expression"];
+    Printcmm.expression Format.std_formatter expr;
+    print_endline "";
+    assert false
 ;;
 
-let rec codegen_expr ~ctx ~builder ~env ~this_module (expr : Cmm.expression) =
+let rec codegen_expr ~ctx ~builder ~env ~this_module ~fundecl (expr : Cmm.expression) =
   match expr with
+  | Cop (Capply _, func :: args, _) ->
+    let func = codegen_expr ~ctx ~builder ~env ~this_module ~fundecl func in
+    let args = List.map args ~f:(codegen_expr ~ctx ~builder ~env ~this_module ~fundecl) in
+    build_call func (List.to_array args) "" builder
   | Cconst_int (value, _) -> const_int (i64_type ctx) value
   | Cconst_natint (value, _) -> const_int (i64_type ctx) (Nativeint.to_int_exn value)
   | Cconst_float (value, _) -> const_float (double_type ctx) value
   | Cop (Caddv, values, _) ->
     (* 2n + 1 + 2m + 1 = 2(n + m) + 2, so subtract one at the end... this is
     probably wrong for pointers though *)
-    let exprs = List.map values ~f:(codegen_expr ~ctx ~builder ~env ~this_module) in
+    let exprs =
+      List.map values ~f:(codegen_expr ~ctx ~builder ~env ~this_module ~fundecl)
+    in
     let exprs = const_int (i64_type ctx) (-1) :: exprs in
     List.reduce_exn exprs ~f:(fun l r -> build_add l r "" builder)
   | Cop (Caddi, values, _) ->
-    List.map values ~f:(codegen_expr ~ctx ~builder ~env ~this_module)
+    List.map values ~f:(codegen_expr ~ctx ~builder ~env ~this_module ~fundecl)
     |> List.reduce_exn ~f:(fun l r -> build_add l r "" builder)
+  | Cop (Cadda, values, _) ->
+    let sum =
+      List.map values ~f:(codegen_expr ~ctx ~builder ~env ~this_module ~fundecl)
+      |> List.reduce_exn ~f:(fun l r -> build_add l r "" builder)
+    in
+    build_inttoptr sum (pointer_type (i64_type ctx)) "" builder
   | Cop (Cstore _, [ value; dst ], _) ->
-    let dst = codegen_expr ~ctx ~builder ~env ~this_module dst in
-    let value = codegen_expr ~ctx ~builder ~env ~this_module value in
+    let dst = codegen_expr ~ctx ~builder ~env ~this_module ~fundecl dst in
+    let value = codegen_expr ~ctx ~builder ~env ~this_module ~fundecl value in
     build_store value dst builder
+  | Cop (Cload _, [ src ], _) ->
+    let src = codegen_expr ~ctx ~builder ~env ~this_module ~fundecl src in
+    build_load src "" builder
+  | Cop (Ccmpi Cne, [ left; right ], _) ->
+    let left = codegen_expr ~ctx ~builder ~env ~this_module ~fundecl left in
+    let right = codegen_expr ~ctx ~builder ~env ~this_module ~fundecl right in
+    build_icmp Ne left right "" builder
   | Cconst_pointer (value, _) ->
     let intval = const_int (i64_type ctx) value in
     const_inttoptr intval (pointer_type (i64_type ctx))
@@ -70,13 +96,50 @@ let rec codegen_expr ~ctx ~builder ~env ~this_module (expr : Cmm.expression) =
     let real_name = Backend_var.name var in
     String.Table.find_exn env real_name
   | Csequence (before, after) ->
-    let (_ : llvalue) = codegen_expr ~ctx ~builder ~env ~this_module before in
-    codegen_expr ~ctx ~builder ~env ~this_module after
+    let (_ : llvalue) = codegen_expr ~ctx ~builder ~env ~this_module ~fundecl before in
+    codegen_expr ~ctx ~builder ~env ~this_module ~fundecl after
   | Clet (var, value, body) ->
-    let value = codegen_expr ~ctx ~builder ~env ~this_module value in
+    let value = codegen_expr ~ctx ~builder ~env ~this_module ~fundecl value in
     String.Table.add_exn env ~key:(Backend_var.With_provenance.name var) ~data:value;
-    codegen_expr ~ctx ~builder ~env ~this_module body
-  | Cconst_symbol (name, _) -> lookup_global name this_module |> Option.value_exn
+    codegen_expr ~ctx ~builder ~env ~this_module ~fundecl body
+  | Cconst_symbol (name, _) ->
+    (match lookup_global name this_module with
+    | Some global -> global
+    | None ->
+      (match String.Table.find env name with
+      | Some value -> value
+      | None ->
+        print_s
+          [%message "unable to find symbol" (name : string) (env : _ String.Table.t)];
+        Printcmm.expression Format.std_formatter expr;
+        assert false))
+  | Cifthenelse (cond, _, then_, _, else_, _) ->
+    let start_bb = insertion_block builder in
+    let cond = codegen_expr ~ctx ~builder ~env ~this_module ~fundecl cond in
+    let then_bb = append_block ctx "then" fundecl in
+    position_at_end then_bb builder;
+    let then_value = codegen_expr ~ctx ~builder ~env ~this_module ~fundecl then_ in
+    (* in case the then block adds basic blocks *)
+    let then_bb = insertion_block builder in
+    let else_bb = append_block ctx "else" fundecl in
+    position_at_end else_bb builder;
+    let else_value = codegen_expr ~ctx ~builder ~env ~this_module ~fundecl else_ in
+    (* in case the else block adds basic blocks *)
+    let else_bb = insertion_block builder in
+    let merge_bb = append_block ctx "merge" fundecl in
+    position_at_end merge_bb builder;
+    let incoming = [ then_value, then_bb; else_value, else_bb ] in
+    let phi = build_phi incoming "iftmp" builder in
+    (* add a cond branch to the original bb *)
+    position_at_end start_bb builder;
+    let (_ : llvalue) = build_cond_br cond then_bb else_bb builder in
+    (* branch from the ends of the conditional branches to the merge branch *)
+    position_at_end then_bb builder;
+    let (_ : llvalue) = build_br merge_bb builder in
+    position_at_end else_bb builder;
+    let (_ : llvalue) = build_br merge_bb builder in
+    position_at_end merge_bb builder;
+    phi
   | _ ->
     Printcmm.expression Format.std_formatter expr;
     assert false
@@ -88,20 +151,6 @@ let funtype ctx (fundecl : Cmm.fundecl) =
     List.map fundecl.fun_args ~f:(fun (_, machtype) -> type_of_machtype ctx machtype)
   in
   function_type return_type (List.to_array args)
-;;
-
-let type_of_data_item ctx (data_item : Cmm.data_item) =
-  match data_item with
-  | Cdefine_symbol _ | Cglobal_symbol _ -> None
-  | Cint8 _ -> Some (i8_type ctx)
-  | Cint16 _ -> Some (i16_type ctx)
-  | Cint32 _ -> Some (i32_type ctx)
-  | Cint _ -> Some (i64_type ctx)
-  | Csingle _ -> Some (float_type ctx)
-  | Cdouble _ -> Some (double_type ctx)
-  | Cstring str -> Some (vector_type (i8_type ctx) (String.length str))
-  | Csymbol_address _ -> (* TODO? *) None
-  | Cskip _ | Calign _ -> None
 ;;
 
 let value_of_data_item ctx (data_item : Cmm.data_item) =
@@ -138,10 +187,13 @@ let emit (cmm : Cmm.phrase list) =
               real_name, arg)
         in
         let env = String.Table.of_alist_exn args in
+        String.Table.add_exn env ~key:cfundecl.fun_name ~data:fundecl;
         let entry = append_block ctx "entry" fundecl in
         position_at_end entry builder;
         (match
-           let ret_val = codegen_expr ~ctx ~builder ~env ~this_module cfundecl.fun_body in
+           let ret_val =
+             codegen_expr ~ctx ~builder ~env ~this_module ~fundecl cfundecl.fun_body
+           in
            build_ret ret_val builder
          with
         | _ -> ()
@@ -196,50 +248,4 @@ let emit (cmm : Cmm.phrase list) =
         in
         ());
   dump_module this_module
-;;
-
-let%expect_test "" =
-  let source = {| let f x = 10 + x;; |} in
-  let cmm = Trycmm.cmm_of_source source in
-  [%expect
-    {|
-    (data)(data int 3063 "camlMelse__2": addr "camlMelse__f_80" int 3)(data
-                                                                       int 1792
-                                                                       global "camlMelse"
-                                                                       "camlMelse":
-                                                                       int 1)
-    (data
-     global "camlMelse__gc_roots"
-     "camlMelse__gc_roots":
-     addr "camlMelse"
-     int 0)(function{:1,7-17} camlMelse__f_80 (x/82: val) (+ x/82 20))
-    (function camlMelse__entry ()
-     (let f/80 "camlMelse__2" (store val(root-init) "camlMelse" f/80)) 1a) |}];
-  emit cmm;
-  [%expect
-    {|
-    ; ModuleID = 'melse'
-    source_filename = "melse"
-
-    @0 = global {} zeroinitializer
-    @1 = global { i64, i64 } { i64 3063, i64 3 }
-    @camlMelse__2 = private global { i64, i64 }* getelementptr inbounds ({ i64, i64 }, { i64, i64 }* @1, i64 1)
-    @2 = global { i64, i64 } { i64 1792, i64 1 }
-    @camlMelse = global { i64, i64 }* getelementptr inbounds ({ i64, i64 }, { i64, i64 }* @2, i64 1)
-    @camlMelse.1 = private global { i64, i64 }* getelementptr inbounds ({ i64, i64 }, { i64, i64 }* @2, i64 1)
-    @3 = global { i64 } zeroinitializer
-    @camlMelse__gc_roots = global { i64 }* @3
-    @camlMelse__gc_roots.2 = private global { i64 }* @3
-
-    define i64 @camlMelse__f_80(i64 %x) {
-    entry:
-      %0 = add i64 %x, 20
-      ret i64 %0
-    }
-
-    define i64* @camlMelse__entry() {
-    entry:
-      store { i64, i64 }** @camlMelse, { i64, i64 }** @camlMelse__2
-      ret i64* inttoptr (i64 1 to i64*)
-    } |}]
 ;;

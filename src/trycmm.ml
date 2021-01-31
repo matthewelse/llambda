@@ -31,12 +31,17 @@ module Frontend = struct
     Env.set_unit_name (module_name t);
     let env = Compmisc.initial_env () in
     let typed =
-      Ocaml_common.Typemod.type_implementation
-        (source_file t)
-        t.source_prefix
-        (module_name t)
-        env
-        structure
+      try
+        Ocaml_common.Typemod.type_implementation
+          (source_file t)
+          t.source_prefix
+          (module_name t)
+          env
+          structure
+      with
+      | Env.Error error as exn ->
+        Env.report_error Format.std_formatter error;
+        raise exn
     in
     if t.dump_typed_ast
     then Printtyped.implementation_with_coercion Format.std_formatter typed;
@@ -126,99 +131,4 @@ let cmm_of_source source =
     { prefix_name = "melse"; dump_cmm = true; dump_clambda = false; dump_lambda = false }
   in
   Backend.to_cmm config typed_ast
-;;
-
-let%expect_test "compile" =
-  let source = {|
-    let f x = 1234 + x;;
-  |} in
-  let config : Frontend.t =
-    { source_prefix = "melse"; dump_ast = true; dump_typed_ast = true }
-  in
-  let structure = Frontend.parse config source in
-  [%expect {|
-    let f x = 1234 + x |}];
-  let typed_ast = Frontend.type_impl config structure in
-  [%expect
-    {|
-    [
-      structure_item ([2,1+4]..[2,1+22])
-        Tstr_value Nonrec
-        [
-          <def>
-            pattern ([2,1+8]..[2,1+9])
-              Tpat_var "f/80"
-            expression ([2,1+10]..[2,1+22]) ghost
-              Texp_function
-              Nolabel
-              [
-                <case>
-                  pattern ([2,1+10]..[2,1+11])
-                    Tpat_var "x/82"
-                  expression ([2,1+14]..[2,1+22])
-                    Texp_apply
-                    expression ([2,1+19]..[2,1+20])
-                      Texp_ident "Stdlib!.+"
-                    [
-                      <arg>
-                        Nolabel
-                        expression ([2,1+14]..[2,1+18])
-                          Texp_constant Const_int 1234
-                      <arg>
-                        Nolabel
-                        expression ([2,1+21]..[2,1+22])
-                          Texp_ident "x/82"
-                    ]
-              ]
-        ]
-    ] |}];
-  let config : Backend.t =
-    { prefix_name = "melse"; dump_cmm = false; dump_clambda = true; dump_lambda = true }
-  in
-  let cmm = Backend.to_cmm config typed_ast in
-  [%expect
-    {|
-    (seq
-      (let (f/80 = (function x/82[int] : int (+ 1234 x/82)))
-        (setfield_ptr(root-init) 0 (global Melse!) f/80))
-    File "_none_", line 1:
-    Warning 58: no cmx file was found in path for module Melse, and its interface was not compiled with -opaque
-
-      0a)(seq
-           (let
-             (f/80 (closure  (fun caml__f_80:int 1  x/82[int] (+ 1234 x/82)) ))
-             (setfield_ptr(root-init) 0 (read_symbol camlMelse) f/80))
-           0a)
-    ("preallocated block" (symbol caml) (exported true) (tag 0) (field_count 1)) |}];
-  List.iter cmm ~f:(function
-      | Cfunction { fun_name; _ } -> print_s [%message "fundecl" (fun_name : string)]
-      | Cdata items ->
-        print_s [%message "data"];
-        List.iter items ~f:(function
-            | Cint value -> print_s [%message "cint" (value : nativeint)]
-            | Cdefine_symbol name -> print_s [%message "define_symbol" (name : string)]
-            | Cglobal_symbol name -> print_s [%message "global_symbol" (name : string)]
-            | Csymbol_address address ->
-              print_s [%message "symbol_address" (address : string)]
-            | _ -> print_s [%message "other"]));
-  [%expect
-    {|
-    data
-    data
-    (cint (value 3063))
-    (define_symbol (name caml__1))
-    (symbol_address (address caml__f_80))
-    (cint (value 3))
-    data
-    (cint (value 1792))
-    (global_symbol (name caml))
-    (define_symbol (name caml))
-    (cint (value 1))
-    data
-    (global_symbol (name caml__gc_roots))
-    (define_symbol (name caml__gc_roots))
-    (symbol_address (address caml))
-    (cint (value 0))
-    (fundecl (fun_name caml__f_80))
-    (fundecl (fun_name caml__entry)) |}]
 ;;

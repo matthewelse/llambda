@@ -1,0 +1,6 @@
+(library
+ (name llambda_test)
+ (libraries core llambda)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane ppx_inline_test)))
