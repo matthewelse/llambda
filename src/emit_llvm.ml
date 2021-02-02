@@ -6,7 +6,7 @@ let type_of_machtype ctx (machtype : Cmm.machtype) =
   | [||] -> void_type ctx
   | [| component |] ->
     (match component with
-    | Val | Addr -> pointer_type (i64_type ctx)
+    | Val | Addr -> pointer_type (i8_type ctx)
     | Int -> i64_type ctx
     | Float -> float_type ctx)
   | _ -> assert false
@@ -28,6 +28,7 @@ let optype ctx (op : Cmm.operation) =
   | Casr -> i64_type ctx
   | Cstore _ -> void_type ctx
   | Ccmpi _ -> i1_type ctx
+  | Calloc -> pointer_type (i8_type ctx)
   | _ -> assert false
 ;;
 
@@ -52,43 +53,34 @@ let rec exprtype ctx (expr : Cmm.expression) =
     assert false
 ;;
 
+let type_of_memory_chunk ctx (chunk : Cmm.memory_chunk) =
+  match chunk with
+  | Byte_unsigned -> i8_type ctx
+  | Byte_signed -> i8_type ctx (* signed/unsigned addition? *)
+  | Sixteen_unsigned -> i16_type ctx
+  | Sixteen_signed -> i16_type ctx
+  | Thirtytwo_signed -> i32_type ctx
+  | Thirtytwo_unsigned -> i32_type ctx
+  | Word_int -> i64_type ctx
+  | Word_val -> pointer_type (i8_type ctx)
+  | Single -> float_type ctx
+  | Double | Double_u -> double_type ctx
+;;
+
+let to_integer_if_pointer ~ctx ~builder value =
+  match classify_type (type_of value) with
+  | Pointer -> build_ptrtoint value (i64_type ctx) "" builder
+  | Integer -> value
+  | _ -> failwith "idk"
+;;
+
 let rec codegen_expr ~ctx ~builder ~env ~this_module ~fundecl (expr : Cmm.expression) =
   match expr with
-  | Cop (Capply _, func :: args, _) ->
-    let func = codegen_expr ~ctx ~builder ~env ~this_module ~fundecl func in
-    let args = List.map args ~f:(codegen_expr ~ctx ~builder ~env ~this_module ~fundecl) in
-    build_call func (List.to_array args) "" builder
   | Cconst_int (value, _) -> const_int (i64_type ctx) value
   | Cconst_natint (value, _) -> const_int (i64_type ctx) (Nativeint.to_int_exn value)
   | Cconst_float (value, _) -> const_float (double_type ctx) value
-  | Cop (Caddv, values, _) ->
-    (* 2n + 1 + 2m + 1 = 2(n + m) + 2, so subtract one at the end... this is
-    probably wrong for pointers though *)
-    let exprs =
-      List.map values ~f:(codegen_expr ~ctx ~builder ~env ~this_module ~fundecl)
-    in
-    let exprs = const_int (i64_type ctx) (-1) :: exprs in
-    List.reduce_exn exprs ~f:(fun l r -> build_add l r "" builder)
-  | Cop (Caddi, values, _) ->
-    List.map values ~f:(codegen_expr ~ctx ~builder ~env ~this_module ~fundecl)
-    |> List.reduce_exn ~f:(fun l r -> build_add l r "" builder)
-  | Cop (Cadda, values, _) ->
-    let sum =
-      List.map values ~f:(codegen_expr ~ctx ~builder ~env ~this_module ~fundecl)
-      |> List.reduce_exn ~f:(fun l r -> build_add l r "" builder)
-    in
-    build_inttoptr sum (pointer_type (i64_type ctx)) "" builder
-  | Cop (Cstore _, [ value; dst ], _) ->
-    let dst = codegen_expr ~ctx ~builder ~env ~this_module ~fundecl dst in
-    let value = codegen_expr ~ctx ~builder ~env ~this_module ~fundecl value in
-    build_store value dst builder
-  | Cop (Cload _, [ src ], _) ->
-    let src = codegen_expr ~ctx ~builder ~env ~this_module ~fundecl src in
-    build_load src "" builder
-  | Cop (Ccmpi Cne, [ left; right ], _) ->
-    let left = codegen_expr ~ctx ~builder ~env ~this_module ~fundecl left in
-    let right = codegen_expr ~ctx ~builder ~env ~this_module ~fundecl right in
-    build_icmp Ne left right "" builder
+  | Cop (operation, args, debug_info) ->
+    codegen_op ~ctx ~builder ~env ~this_module ~fundecl operation args debug_info
   | Cconst_pointer (value, _) ->
     let intval = const_int (i64_type ctx) value in
     const_inttoptr intval (pointer_type (i64_type ctx))
@@ -143,6 +135,86 @@ let rec codegen_expr ~ctx ~builder ~env ~this_module ~fundecl (expr : Cmm.expres
   | _ ->
     Printcmm.expression Format.std_formatter expr;
     assert false
+
+and codegen_op ~ctx ~builder ~env ~this_module ~fundecl operation args debug_info =
+  match operation, args with
+  | Capply _, func :: args ->
+    let func = codegen_expr ~ctx ~builder ~env ~this_module ~fundecl func in
+    let args = List.map args ~f:(codegen_expr ~ctx ~builder ~env ~this_module ~fundecl) in
+    build_call func (List.to_array args) "" builder
+  | Caddv, [ pointer; offset ] ->
+    let pointer = codegen_expr ~ctx ~builder ~env ~this_module ~fundecl pointer in
+    let offset = codegen_expr ~ctx ~builder ~env ~this_module ~fundecl offset in
+    build_gep pointer [| offset |] "" builder
+  | Caddi, values ->
+    List.map values ~f:(fun value ->
+        codegen_expr ~ctx ~builder ~env ~this_module ~fundecl value
+        |> to_integer_if_pointer ~ctx ~builder)
+    |> List.reduce_exn ~f:(fun l r -> build_add l r "" builder)
+  | Cadda, [ pointer; offset ] ->
+    let pointer = codegen_expr ~ctx ~builder ~env ~this_module ~fundecl pointer in
+    let offset = codegen_expr ~ctx ~builder ~env ~this_module ~fundecl offset in
+    build_gep pointer [| offset |] "" builder
+  | Cadda, _ -> failwith "adda has too many arguments."
+  | Cstore _, [ value; dst ] ->
+    let dst = codegen_expr ~ctx ~builder ~env ~this_module ~fundecl dst in
+    let value = codegen_expr ~ctx ~builder ~env ~this_module ~fundecl value in
+    build_store value dst builder
+  | Cstore _, _ -> failwith "store has too many arguments."
+  | Cload (memory_chunk, _), [ src ] ->
+    let src = codegen_expr ~ctx ~builder ~env ~this_module ~fundecl src in
+    let ptr_type = pointer_type (type_of_memory_chunk ctx memory_chunk) in
+    let ptr = build_pointercast src ptr_type "" builder in
+    build_load ptr "" builder
+  | Cload _, _ -> failwith "load has too many arguments."
+  | Ccmpi cmp, [ left; right ] ->
+    let left = codegen_expr ~ctx ~builder ~env ~this_module ~fundecl left in
+    let right = codegen_expr ~ctx ~builder ~env ~this_module ~fundecl right in
+    let left_type = type_of left in
+    let right_type = type_of right in
+    let (cmp_type : TypeKind.t), left, right =
+      match classify_type left_type, classify_type right_type with
+      | Pointer, Pointer -> Pointer, left, right
+      | Integer, Integer -> Integer, left, right
+      | Pointer, Integer -> Pointer, left, build_inttoptr right left_type "" builder
+      | Integer, Pointer -> Pointer, build_inttoptr left right_type "" builder, right
+      | _ -> failwith "don't know how to compare these things"
+    in
+    (match cmp_type, cmp with
+    | Integer, Cne -> build_icmp Ne left right "" builder
+    | Pointer, Cne ->
+      let diff = build_ptrdiff left right "" builder in
+      build_icmp Ne diff (const_int (type_of diff) 0) "" builder
+    | _ -> failwith "don't know how to build this comparison")
+  | Calloc, data ->
+    (* 
+      ptr = alloca
+      ptr = caml_alloc(List.length data, 0)
+      llvm.gcroot(ptr)
+    *)
+    let ptr_ptr (* : val pointer *) =
+      build_alloca (pointer_type (i8_type ctx)) "" builder
+    in
+    let ptr =
+      build_call
+        (lookup_function "caml_alloc" this_module
+        |> Option.value_exn ~message:"(BUG) caml_alloc not defined.")
+        [| const_int (i64_type ctx) (List.length data); const_int (i32_type ctx) 0 |]
+        ""
+        builder
+    in
+    let (_ : llvalue) = build_store ptr ptr_ptr builder in
+    let (_ : llvalue) =
+      build_call
+        (lookup_function "llvm.gcroot" this_module |> Option.value_exn)
+        [| ptr_ptr; const_null (pointer_type (i8_type ctx)) |]
+        ""
+        builder
+    in
+    ptr
+  | _ ->
+    let operation = Printcmm.operation debug_info operation in
+    raise_s [%message "I don't know how to compile this operator." operation]
 ;;
 
 let funtype ctx (fundecl : Cmm.fundecl) =
@@ -172,10 +244,27 @@ let emit (cmm : Cmm.phrase list) =
   let ctx = global_context () in
   let this_module = create_module ctx "melse" in
   let builder = builder ctx in
+  let (_caml_alloc : llvalue) =
+    declare_function
+      "caml_alloc"
+      (function_type
+         (pointer_type (i8_type ctx))
+         [| i64_type ctx; i32_type ctx (* tag, always zero *) |])
+      this_module
+  in
+  let (_llvm_gcroot : llvalue) =
+    declare_function
+      "llvm.gcroot"
+      (function_type
+         (void_type ctx)
+         [| pointer_type (pointer_type (i8_type ctx)); pointer_type (i8_type ctx) |])
+      this_module
+  in
   List.iter cmm ~f:(function
       | Cfunction cfundecl ->
         let funtype = funtype ctx cfundecl in
         let fundecl = declare_function cfundecl.fun_name funtype this_module in
+        set_gc (Some "ocaml") fundecl;
         (* set argument names *)
         let args =
           List.map2_exn

@@ -128,7 +128,7 @@ let cmm_of_source source =
   let structure = Frontend.parse config source in
   let typed_ast = Frontend.type_impl config structure in
   let config : Backend.t =
-    { prefix_name = "melse"; dump_cmm = true; dump_clambda = false; dump_lambda = false }
+    { prefix_name = "melse"; dump_cmm = false; dump_clambda = false; dump_lambda = false }
   in
   Backend.to_cmm config typed_ast
 ;;
