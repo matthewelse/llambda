@@ -156,28 +156,28 @@ let rec codegen_expr t (expr : Cmm.expression) =
     let real_else_bb = insertion_block t.builder in
     let merge_bb = append_block t.ctx "merge" t.fundecl in
     position_at_end merge_bb t.builder;
-    (* TODO: we don't need all of these branches in the merge branch if these
-    bbs aren't predecessors of the merge block (bc of exit nodes)  *)
-    let incoming = [ then_value, real_then_bb; else_value, real_else_bb ] in
-    let phi = build_phi incoming "iftmp" t.builder in
     (* add a cond branch to the original bb *)
     position_at_end start_bb t.builder;
     let (_ : llvalue) = build_cond_br cond then_bb else_bb t.builder in
     (* branch from the ends of the conditional branches to the merge branch *)
     position_at_end real_then_bb t.builder;
-    (match block_terminator real_then_bb with
-    | None ->
-      let (_ : llvalue) = build_br merge_bb t.builder in
-      ()
-    | Some _ -> ());
+    let incoming =
+      match block_terminator real_then_bb with
+      | None ->
+        let (_ : llvalue) = build_br merge_bb t.builder in
+        [ then_value, real_then_bb ]
+      | Some _ -> []
+    in
     position_at_end real_else_bb t.builder;
-    (match block_terminator real_else_bb with
-    | None ->
-      let (_ : llvalue) = build_br merge_bb t.builder in
-      ()
-    | Some _ -> ());
+    let incoming =
+      match block_terminator real_else_bb with
+      | None ->
+        let (_ : llvalue) = build_br merge_bb t.builder in
+        (else_value, real_else_bb) :: incoming
+      | Some _ -> incoming
+    in
     position_at_end merge_bb t.builder;
-    phi
+    build_phi incoming "iftmp" t.builder
   | Ccatch (_, [ (index, [], handler, _) ], body) ->
     let body_bb = insertion_block t.builder in
     let handler_bb = append_block t.ctx [%string "handler.%{index#Int}"] t.fundecl in
@@ -187,26 +187,32 @@ let rec codegen_expr t (expr : Cmm.expression) =
     position_at_end handler_bb t.builder;
     let handler_value = codegen_expr t handler in
     let real_handler_bb = insertion_block t.builder in
-    (match block_terminator real_handler_bb with
-    | None ->
-      let (_ : llvalue) = build_br exit_bb t.builder in
-      ()
-    | Some _ -> ());
+    let incoming =
+      match block_terminator real_handler_bb with
+      | None ->
+        let (_ : llvalue) = build_br exit_bb t.builder in
+        [ handler_value, real_handler_bb ]
+      | Some _ -> []
+    in
     (* body *)
     position_at_end body_bb t.builder;
     let body_value = codegen_expr t body in
     let real_body_bb = insertion_block t.builder in
     Int.Table.remove t.catches index;
-    (match block_terminator real_body_bb with
-    | None ->
-      let (_ : llvalue) = build_br exit_bb t.builder in
-      ()
-    | Some _ -> ());
-    position_at_end exit_bb t.builder;
-    build_phi
-      [ body_value, real_body_bb; handler_value, real_handler_bb ]
-      [%string "phi.%{index#Int}"]
-      t.builder
+    let incoming =
+      match block_terminator real_body_bb with
+      | None ->
+        let (_ : llvalue) = build_br exit_bb t.builder in
+        (body_value, real_body_bb) :: incoming
+      | Some _ -> incoming
+    in
+    (match incoming with
+    | [] ->
+      remove_block exit_bb;
+      const_int (i64_type t.ctx) 1
+    | _ ->
+      position_at_end exit_bb t.builder;
+      build_phi incoming [%string "phi.%{index#Int}"] t.builder)
   | Cexit (index, []) ->
     let (_ : llvalue) = build_br (Int.Table.find_exn t.catches index) t.builder in
     const_int (i64_type t.ctx) 1
