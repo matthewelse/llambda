@@ -88,7 +88,8 @@ type t =
   { ctx : llcontext
   ; builder : llbuilder
   ; this_module : llmodule
-  ; env : [ `Mutable of llvalue | `Immutable of llvalue ] String.Table.t
+  ; env :
+      [ `Mutable of llvalue | `Immutable of llvalue | `Value of llvalue ] String.Table.t
   ; fundecl : llvalue
   ; catches : llbasicblock Int.Table.t
   }
@@ -106,7 +107,8 @@ let rec codegen_expr t (expr : Cmm.expression) =
     let real_name = Backend_var.name var in
     let var = String.Table.find_exn t.env real_name in
     (match var with
-    | `Immutable ptr | `Mutable ptr -> build_load ptr "" t.builder)
+    | `Immutable ptr | `Mutable ptr -> build_load ptr "" t.builder
+    | `Value value -> value)
   | Csequence (before, after) ->
     let (_ : llvalue) = codegen_expr t before in
     codegen_expr t after
@@ -140,7 +142,8 @@ let rec codegen_expr t (expr : Cmm.expression) =
           [%message
             "unable to find symbol"
               (name : string)
-              ~env:(t.env : [ `Immutable of _ | `Mutable of _ ] String.Table.t)];
+              ~env:
+                (t.env : [ `Immutable of _ | `Mutable of _ | `Value of _ ] String.Table.t)];
         Printcmm.expression Format.err_formatter expr;
         assert false
       | Some fn -> fn))
@@ -179,10 +182,13 @@ let rec codegen_expr t (expr : Cmm.expression) =
         (else_value, real_else_bb) :: incoming
       | Some _ -> incoming
     in
-    position_at_end merge_bb t.builder;
     (match incoming with
-    | [] -> assert false
-    | _ -> build_phi incoming "iftmp" t.builder)
+    | [] ->
+      remove_block merge_bb;
+      const_int (i64_type t.ctx) 1
+    | _ ->
+      position_at_end merge_bb t.builder;
+      build_phi incoming "iftmp" t.builder)
   | Ccatch (_, [ (index, [], handler, _) ], body) ->
     let body_bb = insertion_block t.builder in
     let handler_bb = append_block t.ctx [%string "handler.%{index#Int}"] t.fundecl in
@@ -224,7 +230,7 @@ let rec codegen_expr t (expr : Cmm.expression) =
   | Cassign (var, expr) ->
     let name = Backend_var.name var in
     (match String.Table.find t.env name with
-    | None | Some (`Immutable _) ->
+    | None | Some (`Immutable _ | `Value _) ->
       raise_s [%message "Unknown mutable variable." (name : string)]
     | Some (`Mutable ptr) ->
       let value = codegen_expr t expr in
@@ -237,7 +243,7 @@ let rec codegen_expr t (expr : Cmm.expression) =
 
 and codegen_op t operation args debug_info =
   let name = Printcmm.operation debug_info operation in
-  Core.eprint_s [%message "codegen_op" (name : string)]; 
+  Core.eprint_s [%message "codegen_op" (name : string)];
   match operation, args with
   | Capply _, func :: args ->
     let func = codegen_expr t func in
@@ -397,11 +403,11 @@ let emit (cmm : Cmm.phrase list) =
             ~f:(fun arg (name, _) ->
               let real_name = Backend_var.With_provenance.name name in
               set_value_name real_name arg;
-              real_name, `Immutable arg)
+              real_name, `Value arg)
         in
         let env = String.Table.of_alist_exn args in
         let catches = Int.Table.create () in
-        String.Table.add_exn env ~key:cfundecl.fun_name ~data:(`Immutable fundecl);
+        String.Table.add_exn env ~key:cfundecl.fun_name ~data:(`Value fundecl);
         let entry = append_block ctx "entry" fundecl in
         position_at_end entry builder;
         (match
