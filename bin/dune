@@ -1,0 +1,5 @@
+(executable
+ (name llambda)
+ (libraries core llambda)
+ (preprocess
+  (pps ppx_jane)))
