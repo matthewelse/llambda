@@ -44,7 +44,10 @@ let rec exprtype ctx env (expr : Cmm.expression) =
     String.Table.remove env name;
     body_type
   | Cvar name -> String.Table.find_exn env (Backend_var.name name)
-  | Cconst_int _ -> i64_type ctx
+  | Cconst_int _ ->
+    (* this is a little weird, since this can be used to construct boxed
+    integers too :/ *)
+    i64_type ctx
   | Cconst_natint _ -> i64_type ctx
   | Cconst_float _ -> double_type ctx
   | Cphantom_let (_, _, body) | Csequence (_, body) | Cifthenelse (_, _, body, _, _, _) ->
@@ -177,7 +180,9 @@ let rec codegen_expr t (expr : Cmm.expression) =
       | Some _ -> incoming
     in
     position_at_end merge_bb t.builder;
-    build_phi incoming "iftmp" t.builder
+    (match incoming with
+    | [] -> assert false
+    | _ -> build_phi incoming "iftmp" t.builder)
   | Ccatch (_, [ (index, [], handler, _) ], body) ->
     let body_bb = insertion_block t.builder in
     let handler_bb = append_block t.ctx [%string "handler.%{index#Int}"] t.fundecl in
@@ -231,6 +236,8 @@ let rec codegen_expr t (expr : Cmm.expression) =
     assert false
 
 and codegen_op t operation args debug_info =
+  let name = Printcmm.operation debug_info operation in
+  Core.eprint_s [%message "codegen_op" (name : string)]; 
   match operation, args with
   | Capply _, func :: args ->
     let func = codegen_expr t func in
@@ -247,6 +254,8 @@ and codegen_op t operation args debug_info =
   | Cadda, [ pointer; offset ] ->
     let pointer = codegen_expr t pointer in
     let offset = codegen_expr t offset in
+    string_of_llvalue pointer |> print_endline;
+    string_of_llvalue offset |> print_endline;
     build_gep pointer [| offset |] "" t.builder
   | Cadda, _ -> failwith "adda has too many arguments."
   | Cor, [ left; right ] ->
@@ -307,11 +316,6 @@ and codegen_op t operation args debug_info =
       string_of_llvalue right |> print_endline;
       failwith ("don't know how to build this comparison " ^ cmp))
   | Calloc, data ->
-    (* 
-      ptr = alloca
-      ptr = caml_alloc(List.length data, 0)
-      llvm.gcroot(ptr)
-    *)
     let ptr_ptr (* : val pointer *) =
       build_alloca (pointer_type (i8_type t.ctx)) "" t.builder
     in
