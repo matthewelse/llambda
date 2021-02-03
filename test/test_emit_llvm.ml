@@ -4,7 +4,7 @@ open Llambda.Emit_llvm
 
 let%expect_test "" =
   let source = {| let f x = 10 + x;; |} in
-  let cmm = Trycmm.cmm_of_source source in
+  let cmm = Trycmm.cmm_of_source ~dump_cmm:false source in
   [%expect {| |}];
   emit cmm;
   [%expect
@@ -45,7 +45,7 @@ let%expect_test "" =
 
 let%expect_test "" =
   let source = {| let rec sum x = match x with | [] -> 0 | x :: xs -> x + (sum xs);; |} in
-  let cmm = Trycmm.cmm_of_source source in
+  let cmm = Trycmm.cmm_of_source ~dump_cmm:false source in
   [%expect {| |}];
   emit cmm;
   [%expect
@@ -110,7 +110,7 @@ let%expect_test "" =
     {|  type t = { x : int; y : int; z : int }
 let create x y z = { x; y; z } |}
   in
-  let cmm = Trycmm.cmm_of_source source in
+  let cmm = Trycmm.cmm_of_source ~dump_cmm:false source in
   [%expect {| |}];
   emit cmm;
   [%expect
