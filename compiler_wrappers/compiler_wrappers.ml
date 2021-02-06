@@ -1,1 +1,1 @@
-module Cmm = Cmm
+module Wrap_cmm = Wrap_cmm

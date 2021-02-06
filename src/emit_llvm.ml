@@ -1,6 +1,7 @@
 open Core
 open Llvm
 open Wrap_llvm
+module Cmm = Compiler_wrappers.Wrap_cmm
 
 let type_of_memory_chunk ctx (chunk : Cmm.memory_chunk) =
   match chunk with
@@ -16,15 +17,15 @@ let type_of_memory_chunk ctx (chunk : Cmm.memory_chunk) =
 let type_of_expression ctx env expression =
   let unify (machtypel, lltypel) (machtyper, lltyper) =
     match machtypel, machtyper with
-    | [||], [||] -> machtypel, lltypel
-    | [| Cmm.Int |], [| Cmm.Int |] ->
+    | None, None -> machtypel, lltypel
+    | Some Cmm.Int, Some Cmm.Int ->
       (* Let's assume that we sign-extend things or something. *)
       let larger_bitwidth =
         Int.max (integer_bitwidth lltypel) (integer_bitwidth lltyper)
       in
       machtypel, integer_type ctx larger_bitwidth
-    | [| l |], [| r |] ->
-      let machtype = [| Cmm.lub_component l r |] in
+    | Some l, Some r ->
+      let machtype = Some (Cmm.lub_component l r) in
       machtype, Declarations.type_of_machtype ctx machtype
     | _ -> assert false
   in
@@ -34,21 +35,21 @@ let type_of_expression ctx env expression =
     | Cextcall (_, result, _, _) -> result, Declarations.type_of_machtype ctx result
     | Cload (memory_chunk, _) -> type_of_memory_chunk ctx memory_chunk
     | Calloc -> Cmm.typ_val, Declarations.type_of_machtype ctx Cmm.typ_val
-    | Cstore _ -> [||], Declarations.type_of_machtype ctx [||]
+    | Cstore _ -> None, Declarations.type_of_machtype ctx None
     | Caddi | Csubi | Cmuli | Cmulhi | Cdivi | Cmodi | Cand | Cor | Cxor | Clsl | Clsr
     | Casr ->
       List.map args ~f:(machtype_of_expression env)
       |> List.reduce_exn ~f:(fun (machtype1, lltype1) (machtype2, lltype2) ->
              match machtype1, machtype2 with
-             | [| Cmm.Float |], _ | _, [| Float |] | [||], [||] -> assert false
-             | [| Int |], [| Int |] ->
+             | Some Cmm.Float, _ | _, Some Float | None, None -> assert false
+             | Some Int, Some Int ->
                (* Let's assume that we sign-extend things or something. *)
                let larger_bitwidth =
                  Int.max (integer_bitwidth lltype1) (integer_bitwidth lltype2)
                in
                machtype1, integer_type ctx larger_bitwidth
-             | [| l |], [| r |] ->
-               let machtype = [| Cmm.lub_component l r |] in
+             | Some l, Some r ->
+               let machtype = Some (Cmm.lub_component l r) in
                machtype, Declarations.type_of_machtype ctx machtype
              | _ -> assert false)
     | Ccmpi _ -> Cmm.typ_int, i1_type ctx
@@ -61,7 +62,7 @@ let type_of_expression ctx env expression =
       List.map args ~f:(machtype_of_expression env)
       |> List.reduce_exn ~f:(fun (machtype1, lltype1) (machtype2, lltype2) ->
              match machtype1, machtype2 with
-             | [| Cmm.Float |], _ | _, [| Float |] ->
+             | Some Cmm.Float, _ | _, Some Float ->
                if phys_equal lltype1 lltype2
                then machtype1, lltype1
                else
@@ -96,15 +97,7 @@ let type_of_expression ctx env expression =
     | Csequence (_, r) -> machtype_of_expression env r
     | Cifthenelse (_, _, then_, _, else_, _) ->
       unify (machtype_of_expression env then_) (machtype_of_expression env else_)
-    | _ ->
-      let (_ : string) = Format.flush_str_formatter () in
-      let expression =
-        Printcmm.expression Format.str_formatter expr;
-        Format.flush_str_formatter ()
-      in
-      raise_s
-        [%message
-          "Trying to find type for unknown expression type." (expression : string)]
+    | _ -> raise_s [%message "Trying to find type for unknown expression type."]
   in
   machtype_of_expression env expression |> snd
 ;;
@@ -183,7 +176,6 @@ let rec codegen_expr t (expr : Cmm.expression) =
               (name : string)
               ~env:
                 (t.env : [ `Immutable of _ | `Mutable of _ | `Value of _ ] String.Table.t)];
-        Printcmm.expression Format.err_formatter expr;
         assert false
       | Some fn -> fn))
   | Cifthenelse (cond, _, then_, _, else_, _) ->
@@ -276,20 +268,13 @@ let rec codegen_expr t (expr : Cmm.expression) =
       let (_ : llvalue) = build_store value ptr t.builder in
       const_int (i64_type t.ctx) 1)
   | Ctuple [] -> const_int (i64_type t.ctx) 1
-  | _ ->
-    Printcmm.expression Format.err_formatter expr;
-    assert false
+  | _ -> assert false
 
-and codegen_operation t operation args debug_info =
+and codegen_operation t operation args (_ : Debuginfo.t) =
   match operation, args with
   | Capply return_type, func :: args ->
-    let func_str =
-      List.map (func :: args) ~f:(fun arg ->
-          Printcmm.expression Format.str_formatter arg;
-          Format.flush_str_formatter ())
-    in
     let types =
-      Array.map return_type ~f:(function
+      Option.map return_type ~f:(function
           | Val -> [%sexp Val]
           | Addr -> [%sexp Addr]
           | Int -> [%sexp Int]
@@ -299,11 +284,7 @@ and codegen_operation t operation args debug_info =
     let func_type = type_of func |> element_type in
     let typs = param_types func_type |> Array.to_list in
     eprint_s
-      [%message
-        "function call"
-          (func_str : string list)
-          (types : Sexp.t array)
-          (string_of_lltype func_type)];
+      [%message "function call" (types : Sexp.t option) (string_of_lltype func_type)];
     let args =
       List.map2_exn args typs ~f:(fun arg typ ->
           let arg = codegen_expr t arg in
@@ -448,9 +429,7 @@ and codegen_operation t operation args debug_info =
               codegen_expr t arg |> to_pointer_if_integer ~builder:t.builder ~typ)))
       ""
       t.builder
-  | _ ->
-    let operation = Printcmm.operation debug_info operation in
-    raise_s [%message "I don't know how to compile this operator." operation]
+  | _ -> raise_s [%message "I don't know how to compile this operator."]
 ;;
 
 let type_of_function ctx (fundecl : Cmm.fundecl) =
@@ -533,7 +512,7 @@ let emit (cmm : Cmm.phrase list) =
                 let ptr =
                   build_pointercast
                     ptr
-                    (Declarations.type_of_machtype ctx [| Addr |])
+                    (Declarations.type_of_machtype ctx (Some Addr))
                     ""
                     builder
                 in
@@ -543,7 +522,7 @@ let emit (cmm : Cmm.phrase list) =
                 let ptr =
                   build_pointercast
                     ptr
-                    (Declarations.type_of_machtype ctx [| Addr |])
+                    (Declarations.type_of_machtype ctx (Some Addr))
                     ""
                     builder
                 in

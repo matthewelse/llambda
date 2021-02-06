@@ -1,6 +1,8 @@
-open Core
+open! Core
 open Llvm
 open Wrap_llvm
+
+module Cmm = Compiler_wrappers.Wrap_cmm
 
 let value_type ctx = pointer_type (i8_type ctx)
 let void_pointer_type ctx = pointer_type (i8_type ctx)
@@ -14,9 +16,8 @@ let type_of_machtype_component ctx (component : Cmm.machtype_component) =
 
 let type_of_machtype ctx (machtype : Cmm.machtype) =
   match machtype with
-  | [||] -> void_type ctx
-  | [| component |] -> type_of_machtype_component ctx component
-  | elems -> packed_struct_type ctx (Array.map elems ~f:(type_of_machtype_component ctx))
+  | None -> void_type ctx
+  | Some component -> type_of_machtype_component ctx component
 ;;
 
 let type_of_operation ctx (op : Cmm.operation) =
@@ -29,8 +30,8 @@ let type_of_operation ctx (op : Cmm.operation) =
   | Calloc -> pointer_type (i8_type ctx)
   | Capply machtype -> type_of_machtype ctx machtype
   | _ ->
-    Format.print_string ("Unknown operation type: " ^ Printcmm.operation Debuginfo.none op);
-    Format.print_newline ();
+    (* Format.print_string ("Unknown operation type: " ^ Printcmm.operation Debuginfo.none op); *)
+    (* Format.print_newline (); *)
     assert false
 ;;
 

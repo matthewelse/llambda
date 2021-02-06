@@ -1,5 +1,7 @@
 open Core
 
+module Cmm = Compiler_wrappers.Wrap_cmm
+
 let () =
   (* urgh global state *)
   Clflags.native_code := true
