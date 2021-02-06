@@ -1,7 +1,6 @@
 open! Core
 open Llvm
 open Wrap_llvm
-
 module Cmm = Compiler_wrappers.Wrap_cmm
 
 let value_type ctx = pointer_type (i8_type ctx)

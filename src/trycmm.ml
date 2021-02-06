@@ -1,5 +1,4 @@
 open Core
-
 module Cmm = Compiler_wrappers.Wrap_cmm
 
 let () =
