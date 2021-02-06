@@ -12,32 +12,34 @@ let%expect_test "" =
     ; ModuleID = 'melse'
     source_filename = "melse"
 
-    @0 = global {} zeroinitializer
-    @1 = global { i64, i64 } { i64 3063, i64 3 }
-    @camlMelse__3 = private global { i64, i64 }* getelementptr inbounds ({ i64, i64 }, { i64, i64 }* @1, i64 1)
-    @2 = global { i64, i64 } { i64 1792, i64 1 }
-    @camlMelse = global { i64, i64 }* getelementptr inbounds ({ i64, i64 }, { i64, i64 }* @2, i64 1)
-    @camlMelse.1 = private global { i64, i64 }* getelementptr inbounds ({ i64, i64 }, { i64, i64 }* @2, i64 1)
-    @3 = global { i64 } zeroinitializer
-    @camlMelse__gc_roots = global { i64 }* @3
-    @camlMelse__gc_roots.2 = private global { i64 }* @3
+    @camlMelse__3 = global i64 3
+    @0 = global { i64, i64 } { i64 3063, i64 3 }
+    @camlMelse = global i64 1
+    @camlMelse.1 = global i64 1
+    @1 = global { i64, i64 } { i64 1792, i64 1 }
+    @camlMelse__gc_roots = global i64 0
+    @camlMelse__gc_roots.2 = global i64 0
+    @2 = global i64 0
 
-    declare i8* @caml_alloc(i64 %0, i32 %1)
+    declare i8* @caml_alloc(i64, i32)
 
     ; Function Attrs: nounwind
-    declare void @llvm.gcroot(i8** %0, i8* %1) #0
+    declare void @llvm.gcroot(i8**, i8*) #0
 
-    define i64 @camlMelse__f_80(i8* %x) gc "Ocaml" {
+    define i64 @camlMelse__f_80(i8* %x) gc "ocaml" {
     entry:
       %0 = ptrtoint i8* %x to i64
       %1 = add i64 %0, 20
       ret i64 %1
     }
 
-    define i64* @camlMelse__entry() gc "Ocaml" {
+    define i8* @camlMelse__entry() gc "ocaml" {
     entry:
-      store { i64, i64 }** @camlMelse, { i64, i64 }** @camlMelse__3
-      ret i64* inttoptr (i64 1 to i64*)
+      %0 = alloca i64*
+      store i64* @camlMelse__3, i64** %0
+      %1 = load i64*, i64** %0
+      store i64* @camlMelse, i64* %1
+      ret i8* inttoptr (i64 1 to i8*)
     }
 
     attributes #0 = { nounwind } |}]
@@ -50,25 +52,26 @@ let%expect_test "" =
   emit cmm;
   [%expect
     {|
+    i8* %x
+    i64 8
     ; ModuleID = 'melse'
     source_filename = "melse"
 
-    @0 = global {} zeroinitializer
-    @1 = global { i64, i64 } { i64 3063, i64 3 }
-    @camlMelse__4 = private global { i64, i64 }* getelementptr inbounds ({ i64, i64 }, { i64, i64 }* @1, i64 1)
-    @2 = global { i64, i64 } { i64 1792, i64 1 }
-    @camlMelse = global { i64, i64 }* getelementptr inbounds ({ i64, i64 }, { i64, i64 }* @2, i64 1)
-    @camlMelse.1 = private global { i64, i64 }* getelementptr inbounds ({ i64, i64 }, { i64, i64 }* @2, i64 1)
-    @3 = global { i64 } zeroinitializer
-    @camlMelse__gc_roots = global { i64 }* @3
-    @camlMelse__gc_roots.2 = private global { i64 }* @3
+    @camlMelse__4 = global i64 3
+    @0 = global { i64, i64 } { i64 3063, i64 3 }
+    @camlMelse = global i64 1
+    @camlMelse.1 = global i64 1
+    @1 = global { i64, i64 } { i64 1792, i64 1 }
+    @camlMelse__gc_roots = global i64 0
+    @camlMelse__gc_roots.2 = global i64 0
+    @2 = global i64 0
 
-    declare i8* @caml_alloc(i64 %0, i32 %1)
+    declare i8* @caml_alloc(i64, i32)
 
     ; Function Attrs: nounwind
-    declare void @llvm.gcroot(i8** %0, i8* %1) #0
+    declare void @llvm.gcroot(i8**, i8*) #0
 
-    define i64 @camlMelse__sum_80(i8* %x) gc "Ocaml" {
+    define i64 @camlMelse__sum_80(i8* %x) gc "ocaml" {
     entry:
       %0 = ptrtoint i8* %x to i64
       %1 = sub i64 %0, 1
@@ -92,14 +95,17 @@ let%expect_test "" =
       br label %merge
 
     merge:                                            ; preds = %else, %then
-      %iftmp = phi i64 [ %12, %then ], [ 1, %else ]
+      %iftmp = phi i64 [ 1, %else ], [ %12, %then ]
       ret i64 %iftmp
     }
 
-    define i64* @camlMelse__entry() gc "Ocaml" {
+    define i8* @camlMelse__entry() gc "ocaml" {
     entry:
-      store { i64, i64 }** @camlMelse, { i64, i64 }** @camlMelse__4
-      ret i64* inttoptr (i64 1 to i64*)
+      %0 = alloca i64*
+      store i64* @camlMelse__4, i64** %0
+      %1 = load i64*, i64** %0
+      store i64* @camlMelse, i64* %1
+      ret i8* inttoptr (i64 1 to i8*)
     }
 
     attributes #0 = { nounwind } |}]
@@ -118,22 +124,21 @@ let create x y z = { x; y; z } |}
     ; ModuleID = 'melse'
     source_filename = "melse"
 
-    @0 = global {} zeroinitializer
-    @1 = global { i64, i64 } { i64 4087, i64 7 }
-    @camlMelse__5 = private global { i64, i64 }* getelementptr inbounds ({ i64, i64 }, { i64, i64 }* @1, i64 1)
-    @2 = global { i64, i64 } { i64 1792, i64 1 }
-    @camlMelse = global { i64, i64 }* getelementptr inbounds ({ i64, i64 }, { i64, i64 }* @2, i64 1)
-    @camlMelse.1 = private global { i64, i64 }* getelementptr inbounds ({ i64, i64 }, { i64, i64 }* @2, i64 1)
-    @3 = global { i64 } zeroinitializer
-    @camlMelse__gc_roots = global { i64 }* @3
-    @camlMelse__gc_roots.2 = private global { i64 }* @3
+    @camlMelse__5 = global i64 7
+    @0 = global { i64, i64 } { i64 4087, i64 7 }
+    @camlMelse = global i64 1
+    @camlMelse.1 = global i64 1
+    @1 = global { i64, i64 } { i64 1792, i64 1 }
+    @camlMelse__gc_roots = global i64 0
+    @camlMelse__gc_roots.2 = global i64 0
+    @2 = global i64 0
 
-    declare i8* @caml_alloc(i64 %0, i32 %1)
+    declare i8* @caml_alloc(i64, i32)
 
     ; Function Attrs: nounwind
-    declare void @llvm.gcroot(i8** %0, i8* %1) #0
+    declare void @llvm.gcroot(i8**, i8*) #0
 
-    define i8* @camlMelse__create_84(i8* %x, i8* %y, i8* %z) gc "Ocaml" {
+    define i8* @camlMelse__create_84(i8* %x, i8* %y, i8* %z) gc "ocaml" {
     entry:
       %0 = alloca i8*
       %1 = call i8* @caml_alloc(i64 4, i32 0)
@@ -142,10 +147,13 @@ let create x y z = { x; y; z } |}
       ret i8* %1
     }
 
-    define i64* @camlMelse__entry() gc "Ocaml" {
+    define i8* @camlMelse__entry() gc "ocaml" {
     entry:
-      store { i64, i64 }** @camlMelse, { i64, i64 }** @camlMelse__5
-      ret i64* inttoptr (i64 1 to i64*)
+      %0 = alloca i64*
+      store i64* @camlMelse__5, i64** %0
+      %1 = load i64*, i64** %0
+      store i64* @camlMelse, i64* %1
+      ret i8* inttoptr (i64 1 to i8*)
     }
 
     attributes #0 = { nounwind } |}]

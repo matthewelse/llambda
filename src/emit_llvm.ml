@@ -1,16 +1,6 @@
 open Core
 open Llvm
-
-let type_of_machtype ctx (machtype : Cmm.machtype) =
-  match machtype with
-  | [||] -> void_type ctx
-  | [| component |] ->
-    (match component with
-    | Val | Addr -> pointer_type (i8_type ctx)
-    | Int -> i64_type ctx
-    | Float -> float_type ctx)
-  | _ -> assert false
-;;
+open Wrapllvm
 
 let optype ctx (op : Cmm.operation) =
   match op with
@@ -29,6 +19,7 @@ let optype ctx (op : Cmm.operation) =
   | Cstore _ -> void_type ctx
   | Ccmpi _ -> i1_type ctx
   | Calloc -> pointer_type (i8_type ctx)
+  | Capply machtype -> Declarations.type_of_machtype ctx machtype
   | _ ->
     Format.print_string ("Unknown operation type: " ^ Printcmm.operation Debuginfo.none op);
     Format.print_newline ();
@@ -102,7 +93,7 @@ let rec codegen_expr t (expr : Cmm.expression) =
   | Cop (operation, args, debug_info) -> codegen_op t operation args debug_info
   | Cconst_pointer (value, _) ->
     let intval = const_int (i64_type t.ctx) value in
-    const_inttoptr intval (pointer_type (i64_type t.ctx))
+    const_inttoptr intval (pointer_type (i8_type t.ctx))
   | Cvar var ->
     let real_name = Backend_var.name var in
     let var = String.Table.find_exn t.env real_name in
@@ -122,7 +113,7 @@ let rec codegen_expr t (expr : Cmm.expression) =
     String.Table.remove t.env name;
     body
   | Clet_mut (var, machtype, value, body) ->
-    let ptr = build_alloca (type_of_machtype t.ctx machtype) "" t.builder in
+    let ptr = build_alloca (Declarations.type_of_machtype t.ctx machtype) "" t.builder in
     let value = codegen_expr t value in
     let (_ : llvalue) = build_store value ptr t.builder in
     String.Table.add_exn
@@ -242,13 +233,12 @@ let rec codegen_expr t (expr : Cmm.expression) =
     assert false
 
 and codegen_op t operation args debug_info =
-  let name = Printcmm.operation debug_info operation in
-  Core.eprint_s [%message "codegen_op" (name : string)];
   match operation, args with
   | Capply _, func :: args ->
     let func = codegen_expr t func in
     let args = List.map args ~f:(codegen_expr t) in
     build_call func (List.to_array args) "" t.builder
+  | Capply _, [] -> raise_s [%message "capply with empty list"]
   | Caddv, [ pointer; offset ] ->
     let pointer = codegen_expr t pointer in
     let offset = codegen_expr t offset in
@@ -350,7 +340,8 @@ and codegen_op t operation args debug_info =
 let funtype ctx (fundecl : Cmm.fundecl) =
   let return_type = exprtype ctx (String.Table.create ()) fundecl.fun_body in
   let args =
-    List.map fundecl.fun_args ~f:(fun (_, machtype) -> type_of_machtype ctx machtype)
+    List.map fundecl.fun_args ~f:(fun (_, machtype) ->
+        Declarations.type_of_machtype ctx machtype)
   in
   function_type return_type (List.to_array args)
 ;;
@@ -371,103 +362,91 @@ let value_of_data_item ctx (data_item : Cmm.data_item) =
 ;;
 
 let emit (cmm : Cmm.phrase list) =
-  let ctx = global_context () in
-  let this_module = create_module ctx "melse" in
-  let builder = builder ctx in
-  let (_caml_alloc : llvalue) =
-    declare_function
-      "caml_alloc"
-      (function_type
-         (pointer_type (i8_type ctx))
-         [| i64_type ctx; i32_type ctx (* tag, always zero *) |])
-      this_module
-  in
-  let (_llvm_gcroot : llvalue) =
-    declare_function
-      "llvm.gcroot"
-      (function_type
-         (void_type ctx)
-         [| pointer_type (pointer_type (i8_type ctx)); pointer_type (i8_type ctx) |])
-      this_module
-  in
-  List.iter cmm ~f:(function
-      | Cfunction cfundecl ->
-        let funtype = funtype ctx cfundecl in
-        let fundecl = declare_function cfundecl.fun_name funtype this_module in
-        set_gc (Some "ocaml") fundecl;
-        (* set argument names *)
-        let args =
-          List.map2_exn
-            (params fundecl |> Array.to_list)
-            cfundecl.fun_args
-            ~f:(fun arg (name, _) ->
-              let real_name = Backend_var.With_provenance.name name in
-              set_value_name real_name arg;
-              real_name, `Value arg)
-        in
-        let env = String.Table.of_alist_exn args in
-        let catches = Int.Table.create () in
-        String.Table.add_exn env ~key:cfundecl.fun_name ~data:(`Value fundecl);
-        let entry = append_block ctx "entry" fundecl in
-        position_at_end entry builder;
-        (match
-           let ret_val =
-             codegen_expr
-               { ctx; builder; env; this_module; fundecl; catches }
-               cfundecl.fun_body
-           in
-           build_ret ret_val builder
-         with
-        | _ -> ()
-        | exception exn ->
-          delete_function fundecl;
-          print_s
-            [%message
-              "exception raised while compiling function"
-                ~name:(cfundecl.fun_name : string)
-                (exn : Exn.t)])
-      | Cdata items ->
-        (* This is kind of weird, but the way to think about this is one big
-        anonymous global, with a few labels inside it. *)
-        let glob_value =
-          List.filter_map items ~f:(value_of_data_item ctx)
-          |> Array.of_list
-          |> const_struct ctx
-        in
-        let anon_global = define_global "" glob_value this_module in
-        (* Add labels to internal things *)
-        let (_ : int) =
-          List.fold items ~init:0 ~f:(fun acc next ->
-              match next with
-              | Cdefine_symbol name ->
-                (* private *)
-                let sym =
-                  if acc = 0
-                  then anon_global
-                  else const_in_bounds_gep anon_global [| const_int (i64_type ctx) acc |]
-                in
-                let glob = define_global name sym this_module in
-                set_linkage Private glob;
-                acc
-              | Cglobal_symbol name ->
-                let sym =
-                  if acc = 0
-                  then anon_global
-                  else const_in_bounds_gep anon_global [| const_int (i64_type ctx) acc |]
-                in
-                let (_ : llvalue) = define_global name sym this_module in
-                acc
-              | Cint8 _
-              | Cint16 _
-              | Cint32 _
-              | Cint _
-              | Csingle _
-              | Cdouble _
-              | Cstring _
-              | Csymbol_address _
-              | Cskip _
-              | Calign _ -> acc + 1)
-        in
-        ());
-  string_of_llmodule this_module |> print_endline
+  let ctx = Ir_context.global () in
+  Ir_module.with_module ~ctx "melse" (fun this_module ->
+      let builder = Ir_builder.create ctx in
+      List.iter (Declarations.builtin_functions ctx) ~f:(fun (name, funtype) ->
+          Ir_module.declare_function' this_module ~name ~funtype);
+      (* Pre-define functions to avoid issues with function ordering. *)
+      List.iter cmm ~f:(function
+          | Cfunction cfundecl ->
+            let funtype = funtype ctx cfundecl in
+            Ir_module.declare_function' this_module ~name:cfundecl.fun_name ~funtype
+          | Cdata _ -> ());
+      (* Compile the functions and globals. *)
+      List.iter cmm ~f:(function
+          | Cfunction cfundecl ->
+            let fundecl =
+              Ir_module.lookup_function_exn this_module ~name:cfundecl.fun_name
+            in
+            set_gc (Some "ocaml") fundecl;
+            (* set argument names *)
+            let args =
+              List.map2_exn
+                (params fundecl |> Array.to_list)
+                cfundecl.fun_args
+                ~f:(fun arg (name, _) ->
+                  let real_name = Backend_var.With_provenance.name name in
+                  set_value_name real_name arg;
+                  real_name, `Value arg)
+            in
+            let env = String.Table.of_alist_exn args in
+            let catches = Int.Table.create () in
+            String.Table.add_exn env ~key:cfundecl.fun_name ~data:(`Value fundecl);
+            let entry = append_block ctx "entry" fundecl in
+            position_at_end entry builder;
+            (try
+               let ret_val =
+                 codegen_expr
+                   { ctx; builder; env; this_module; fundecl; catches }
+                   cfundecl.fun_body
+               in
+               build_ret ret_val builder |> (ignore : llvalue -> unit)
+             with
+            | exn ->
+              delete_function fundecl;
+              eprint_s
+                [%message
+                  "exception raised while compiling function"
+                    ~name:(cfundecl.fun_name : string)
+                    (exn : Exn.t)])
+          | Cdata items ->
+            (* This is kind of weird, but the way to think about this is one big
+               anonymous global, with a few labels inside it. *)
+            let glob_value =
+              let struct_if_non_empty acc =
+                match acc with
+                | [] -> None
+                | [ x ] -> Some x
+                | xs -> const_struct ctx (Array.of_list xs) |> Some
+              in
+              let items = List.rev items in
+              let glob_value, pointers =
+                List.fold_map items ~init:[] ~f:(fun acc next ->
+                    match next with
+                    | Cdefine_symbol name ->
+                      (* private *)
+                      let value = struct_if_non_empty acc in
+                      Option.to_list value, Option.map value ~f:(fun value -> name, value)
+                    | Cglobal_symbol name ->
+                      let value = struct_if_non_empty acc in
+                      Option.to_list value, Option.map value ~f:(fun value -> name, value)
+                    | value ->
+                      (match value_of_data_item ctx value with
+                      | None -> acc, None
+                      | Some value -> value :: acc, None))
+              in
+              let pointers = List.filter_opt pointers in
+              List.iter pointers ~f:(fun (name, value) ->
+                  let (_ : llvalue) = define_global name value this_module in
+                  ());
+              struct_if_non_empty glob_value
+            in
+            (match glob_value with
+            | None -> ()
+            | Some glob_value ->
+              let _anon_global = define_global "" glob_value this_module in
+              ()
+              (* Add labels to internal things *)));
+      string_of_llmodule this_module |> print_endline)
 ;;
