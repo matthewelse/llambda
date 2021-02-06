@@ -1,6 +1,6 @@
 open Core
 open Llvm
-open Wrapllvm
+open Wrap_llvm
 
 let value_type ctx = pointer_type (i8_type ctx)
 let void_pointer_type ctx = pointer_type (i8_type ctx)

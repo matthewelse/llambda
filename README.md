@@ -39,10 +39,15 @@ through clambda or flambda to produce c--. Compile directly from c-- to LLVM.
 - [x] if/then/else
 - [x] for loops & while loops
 - [x] recursive function calls?
-- [ ] closures?
-- [ ] C function calls
+- [x] closures?
+- [x] C function calls
 - [ ] Calls to OCaml functions compiled with llambda
-- [ ] Use GHC's calling convention for external-facing functions (similar to
+- [x] Use GHC's calling convention for external-facing functions (similar to
   OCaml's), maybe use fastcc for internal things
 - [ ] exception handling
 - [ ] more expressive types for llvalues - distingui
+
+## Issues with c--
+
+It's hard to distinguish between integers and pointers in C--, it basically
+doesn't have enough type information for something like LLVM.

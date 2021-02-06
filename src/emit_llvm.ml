@@ -1,6 +1,6 @@
 open Core
 open Llvm
-open Wrapllvm
+open Wrap_llvm
 
 let type_of_memory_chunk ctx (chunk : Cmm.memory_chunk) =
   match chunk with
@@ -113,6 +113,13 @@ let to_integer_if_pointer ~ctx ~builder value =
   match classify_type (type_of value) with
   | Pointer -> build_ptrtoint value (i64_type ctx) "" builder
   | Integer -> value
+  | _ -> failwith "idk"
+;;
+
+let to_pointer_if_integer ~builder ~typ value =
+  match classify_type (type_of value) with
+  | Pointer -> build_pointercast value typ "" builder
+  | Integer -> build_inttoptr value typ "" builder
   | _ -> failwith "idk"
 ;;
 
@@ -275,19 +282,57 @@ let rec codegen_expr t (expr : Cmm.expression) =
 
 and codegen_operation t operation args debug_info =
   match operation, args with
-  | Capply _, func :: args ->
+  | Capply return_type, func :: args ->
+    let func_str =
+      List.map (func :: args) ~f:(fun arg ->
+          Printcmm.expression Format.str_formatter arg;
+          Format.flush_str_formatter ())
+    in
+    let types =
+      Array.map return_type ~f:(function
+          | Val -> [%sexp Val]
+          | Addr -> [%sexp Addr]
+          | Int -> [%sexp Int]
+          | Float -> [%sexp Float])
+    in
     let func = codegen_expr t func in
-    let args = List.map args ~f:(codegen_expr t) in
-    build_call func (List.to_array args) "" t.builder
+    let func_type = type_of func |> element_type in
+    let typs = param_types func_type |> Array.to_list in
+    eprint_s
+      [%message
+        "function call"
+          (func_str : string list)
+          (types : Sexp.t array)
+          (string_of_lltype func_type)];
+    let args =
+      List.map2_exn args typs ~f:(fun arg typ ->
+          let arg = codegen_expr t arg in
+          to_pointer_if_integer ~builder:t.builder ~typ arg)
+    in
+    let call = build_call func (List.to_array args) "" t.builder in
+    set_instruction_call_conv Declarations.ghc_calling_convention call;
+    call
   | Capply _, [] -> raise_s [%message "capply with empty list"]
   | Caddv, [ pointer; offset ] ->
     let pointer = codegen_expr t pointer in
     let offset = codegen_expr t offset in
     build_gep pointer [| offset |] "" t.builder
-  | Caddi, values ->
-    List.map values ~f:(fun value ->
-        codegen_expr t value |> to_integer_if_pointer ~ctx:t.ctx ~builder:t.builder)
-    |> List.reduce_exn ~f:(fun l r -> build_add l r "" t.builder)
+  | Caddi, [ left; right ] ->
+    let left =
+      codegen_expr t left |> to_integer_if_pointer ~ctx:t.ctx ~builder:t.builder
+    in
+    let right =
+      codegen_expr t right |> to_integer_if_pointer ~ctx:t.ctx ~builder:t.builder
+    in
+    build_add left right "" t.builder
+  | Csubi, [ left; right ] ->
+    let left =
+      codegen_expr t left |> to_integer_if_pointer ~ctx:t.ctx ~builder:t.builder
+    in
+    let right =
+      codegen_expr t right |> to_integer_if_pointer ~ctx:t.ctx ~builder:t.builder
+    in
+    build_sub left right "" t.builder
   | Cadda, [ pointer; offset ] ->
     let pointer = codegen_expr t pointer in
     let offset = codegen_expr t offset in
@@ -301,6 +346,10 @@ and codegen_operation t operation args debug_info =
     let left = codegen_expr t left in
     let right = codegen_expr t right in
     build_lshr left right "" t.builder
+  | Clsl, [ left; right ] ->
+    let left = codegen_expr t left in
+    let right = codegen_expr t right in
+    build_shl left right "" t.builder
   | Casr, [ left; right ] ->
     let left = codegen_expr t left in
     let right = codegen_expr t right in
@@ -318,7 +367,13 @@ and codegen_operation t operation args debug_info =
     let src = codegen_expr t src in
     let ptr_type = pointer_type (Declarations.type_of_memory_chunk t.ctx memory_chunk) in
     let ptr = build_pointercast src ptr_type "" t.builder in
-    build_load ptr "" t.builder
+    let raw = build_load ptr "" t.builder in
+    (match memory_chunk with
+    | Byte_unsigned | Byte_signed | Sixteen_unsigned | Sixteen_signed | Thirtytwo_unsigned
+    | Thirtytwo_signed ->
+      build_sext raw (i64_type t.ctx) "" t.builder
+    | Word_int | Word_val -> raw
+    | Single | Double | Double_u -> raw)
   | Cload _, _ -> failwith "load has too many arguments."
   | Ccmpi cmp, [ left; right ] ->
     let left = codegen_expr t left in
@@ -375,6 +430,24 @@ and codegen_operation t operation args debug_info =
         t.builder
     in
     ptr
+  | Cextcall (name, return_type, does_alloc, label), args ->
+    eprint_s
+      [%message
+        "wtf does label mean" (name : string) (label : int option) (does_alloc : bool)];
+    let arg_types = List.map args ~f:(fun _ -> Declarations.value_type t.ctx) in
+    let function_type =
+      function_type
+        (Declarations.type_of_machtype t.ctx return_type)
+        (Array.of_list arg_types)
+    in
+    let func = Ir_module.declare_function t.this_module ~name ~funtype:function_type in
+    build_call
+      func
+      (Array.of_list
+         (List.map2_exn args arg_types ~f:(fun arg typ ->
+              codegen_expr t arg |> to_pointer_if_integer ~builder:t.builder ~typ)))
+      ""
+      t.builder
   | _ ->
     let operation = Printcmm.operation debug_info operation in
     raise_s [%message "I don't know how to compile this operator." operation]
@@ -401,9 +474,13 @@ let value_of_data_item this_module ctx (data_item : Cmm.data_item) =
   | Cstring str ->
     (* should this string have 00 01 02 03 at the end? *) Some (const_stringz ctx str)
   | Csymbol_address name ->
-    Option.first_some (lookup_global name this_module) (lookup_function name this_module)
-    |> Option.value_exn ~message:[%string "Unknown global name %{name}"]
-    |> Some
+    (match
+       Option.first_some
+         (lookup_global name this_module)
+         (lookup_function name this_module)
+     with
+    | Some value -> Some value
+    | None -> Some (declare_global (Declarations.void_pointer_type ctx) name this_module))
   | Cskip _ | Calign _ -> None
 ;;
 
@@ -428,51 +505,14 @@ let emit (cmm : Cmm.phrase list) =
           | Cfunction cfundecl ->
             (* It seems kind of strange that we don't always return a value here... *)
             let function_type = type_of_function ctx cfundecl in
+            eprint_s [%message "declaring function" (cfundecl.fun_name : string)];
             Ir_module.declare_function'
               this_module
               ~name:cfundecl.fun_name
               ~funtype:function_type
-          | Cdata _ ->
-            (* TODO: pre-define globals too. *)
-            ());
-      (* Compile the functions and globals. *)
+          | Cdata _ -> ());
       List.iter cmm ~f:(function
-          | Cfunction cfundecl ->
-            let fundecl =
-              Ir_module.lookup_function_exn this_module ~name:cfundecl.fun_name
-            in
-            set_function_call_conv Declarations.ghc_calling_convention fundecl;
-            set_gc (Some "ocaml") fundecl;
-            (* set argument names *)
-            let args =
-              List.map2_exn
-                (params fundecl |> Array.to_list)
-                cfundecl.fun_args
-                ~f:(fun arg (name, _) ->
-                  let real_name = Backend_var.With_provenance.name name in
-                  set_value_name real_name arg;
-                  real_name, `Value arg)
-            in
-            let env = String.Table.of_alist_exn args in
-            let catches = Int.Table.create () in
-            String.Table.add_exn env ~key:cfundecl.fun_name ~data:(`Value fundecl);
-            let entry = append_block ctx "entry" fundecl in
-            position_at_end entry builder;
-            (try
-               let ret_val =
-                 codegen_expr
-                   { ctx; builder; env; this_module; fundecl; catches }
-                   cfundecl.fun_body
-               in
-               build_ret ret_val builder |> (ignore : llvalue -> unit)
-             with
-            | exn ->
-              delete_function fundecl;
-              eprint_s
-                [%message
-                  "exception raised while compiling function"
-                    ~name:(cfundecl.fun_name : string)
-                    (exn : Exn.t)])
+          | Cfunction _ -> ()
           | Cdata items ->
             let global_names =
               List.filter_map items ~f:(function
@@ -527,5 +567,44 @@ let emit (cmm : Cmm.phrase list) =
               List.iter pointers ~f:(fun (linkage, name, route) ->
                   let glob = Ir_module.define_global this_module ~name route in
                   set_linkage linkage glob)));
+      (* Compile the functions and globals. *)
+      List.iter cmm ~f:(function
+          | Cfunction cfundecl ->
+            let fundecl =
+              Ir_module.lookup_function_exn this_module ~name:cfundecl.fun_name
+            in
+            set_function_call_conv Declarations.ghc_calling_convention fundecl;
+            (* set_gc (Some "ocaml") fundecl; *)
+            (* set argument names *)
+            let args =
+              List.map2_exn
+                (params fundecl |> Array.to_list)
+                cfundecl.fun_args
+                ~f:(fun arg (name, _) ->
+                  let real_name = Backend_var.With_provenance.name name in
+                  set_value_name real_name arg;
+                  real_name, `Value arg)
+            in
+            let env = String.Table.of_alist_exn args in
+            let catches = Int.Table.create () in
+            String.Table.add_exn env ~key:cfundecl.fun_name ~data:(`Value fundecl);
+            let entry = append_block ctx "entry" fundecl in
+            position_at_end entry builder;
+            (try
+               let ret_val =
+                 codegen_expr
+                   { ctx; builder; env; this_module; fundecl; catches }
+                   cfundecl.fun_body
+               in
+               build_ret ret_val builder |> (ignore : llvalue -> unit)
+             with
+            | exn ->
+              delete_function fundecl;
+              raise_s
+                [%message
+                  "exception raised while compiling function"
+                    ~name:(cfundecl.fun_name : string)
+                    (exn : Exn.t)])
+          | Cdata _ -> ());
       string_of_llmodule this_module |> print_endline)
 ;;

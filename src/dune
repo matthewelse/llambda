@@ -1,6 +1,6 @@
 (library
  (name llambda)
  (libraries core ocaml-compiler-libs.optcomp ocaml-compiler-libs.common
-   wrapllvm llvm)
+   wrap_llvm llvm)
  (preprocess
   (pps ppx_jane)))
