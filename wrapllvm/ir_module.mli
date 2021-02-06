@@ -15,6 +15,7 @@ val with_module
 
 val declare_global : t -> name:string -> lltype -> llvalue
 val define_global : t -> name:string -> llvalue -> llvalue
+val define_global' : t -> name:string -> llvalue -> unit
 val lookup_global : t -> name:string -> llvalue option
 val declare_function : t -> name:string -> funtype:Ir_type.t -> llvalue
 val declare_function' : t -> name:string -> funtype:Ir_type.t -> unit

@@ -13,6 +13,7 @@ let with_module ?target_triple ?data_layout ~ctx name f =
 let sexp_of_t t = string_of_llmodule t |> String.sexp_of_t
 let declare_global t ~name type_ = declare_global type_ name t
 let define_global t ~name value = define_global name value t
+let define_global' t ~name value = define_global t ~name value |> (ignore : llvalue -> unit)
 let lookup_global t ~name = lookup_global name t
 let declare_function t ~name ~funtype = declare_function name funtype t
 
