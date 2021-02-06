@@ -441,6 +441,7 @@ let emit (cmm : Cmm.phrase list) =
             let fundecl =
               Ir_module.lookup_function_exn this_module ~name:cfundecl.fun_name
             in
+            set_function_call_conv Declarations.ghc_calling_convention fundecl;
             set_gc (Some "ocaml") fundecl;
             (* set argument names *)
             let args =

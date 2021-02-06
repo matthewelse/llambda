@@ -59,3 +59,5 @@ let builtin_functions ctx =
         ~return_type:(void_type ctx) )
   ]
 ;;
+
+let ghc_calling_convention = 10
