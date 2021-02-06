@@ -1,4 +1,4 @@
 open! Core
-module Cmm = Compiler_wrappers.Wrap_cmm
+open! Import
 
 val emit : Cmm.phrase list -> unit

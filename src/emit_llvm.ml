@@ -1,7 +1,8 @@
-open Core
-open Llvm
-open Wrap_llvm
-module Cmm = Compiler_wrappers.Wrap_cmm
+open! Core
+open! Import
+
+module Backend_var = Ocaml_optcomp.Backend_var
+module Debug_info = Ocaml_common.Debuginfo
 
 let type_of_memory_chunk ctx (chunk : Cmm.memory_chunk) =
   match chunk with
@@ -270,7 +271,7 @@ let rec codegen_expr t (expr : Cmm.expression) =
   | Ctuple [] -> const_int (i64_type t.ctx) 1
   | _ -> assert false
 
-and codegen_operation t operation args (_ : Debuginfo.t) =
+and codegen_operation t operation args (_ : Debug_info.t) =
   match operation, args with
   | Capply return_type, func :: args ->
     let types =
@@ -386,10 +387,9 @@ and codegen_operation t operation args (_ : Debuginfo.t) =
       let diff = build_ptrdiff left right "" t.builder in
       build_icmp Sgt diff (const_int (type_of diff) 0) "" t.builder
     | _ ->
-      let cmp = Printcmm.integer_comparison cmp in
       string_of_llvalue left |> print_endline;
       string_of_llvalue right |> print_endline;
-      failwith ("don't know how to build this comparison " ^ cmp))
+      failwith ("don't know how to build this comparison."))
   | Calloc, data ->
     let ptr_ptr (* : val pointer *) =
       build_alloca (pointer_type (i8_type t.ctx)) "" t.builder

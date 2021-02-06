@@ -1,7 +1,5 @@
 open! Core
-open Llvm
-open Wrap_llvm
-module Cmm = Compiler_wrappers.Wrap_cmm
+open! Import
 
 let value_type ctx = pointer_type (i8_type ctx)
 let void_pointer_type ctx = pointer_type (i8_type ctx)

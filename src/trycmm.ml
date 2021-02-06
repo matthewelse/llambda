@@ -1,9 +1,21 @@
-open Core
+open! Core
+open! Import
+module Compilenv  = Ocaml_optcomp.Compilenv
 module Cmm = Compiler_wrappers.Wrap_cmm
+module Cmmgen = Compiler_wrappers.Wrap_cmmgen
+module Closure_middle_end = Ocaml_optcomp.Closure_middle_end
+module Pprintast = Ocaml_common.Pprintast
+module Printclambda = Ocaml_optcomp.Printclambda
+module Printtyped = Ocaml_common.Printtyped
+module Printlambda = Ocaml_common.Printlambda
+module Compmisc = Ocaml_common.Compmisc
+module Env = Ocaml_common.Env
+module Translmod = Ocaml_common.Translmod
+module Simplif = Ocaml_common.Simplif
 
 let () =
   (* urgh global state *)
-  Clflags.native_code := true
+  Ocaml_common.Clflags.native_code := true
 ;;
 
 let walk (code : Ocaml_optcomp.Cmm.fundecl) =
@@ -51,15 +63,15 @@ module Frontend = struct
 end
 
 module Ident = struct
-  include Ident
+  include Ocaml_common.Ident
 
-  let sexp_of_t t = Ident.name t |> String.sexp_of_t
+  let sexp_of_t t = name t |> String.sexp_of_t
 end
 
 module Path = struct
-  include Path
+  include Ocaml_common.Path
 
-  let sexp_of_t t = Path.name t |> String.sexp_of_t
+  let sexp_of_t t = name t |> String.sexp_of_t
 end
 
 module Backend = struct
@@ -116,7 +128,7 @@ module Backend = struct
                 (tag : int)
                 (field_count : int)]));
     let cmm = Cmmgen.compunit clambda in
-    if t.dump_cmm then List.iter cmm ~f:(Printcmm.phrase Format.std_formatter);
+    (* if t.dump_cmm then List.iter cmm ~f:(Printcmm.phrase Format.std_formatter); *)
     cmm
   ;;
 end

@@ -1,6 +1,5 @@
 open! Core
-open! Wrap_llvm
-module Cmm = Compiler_wrappers.Wrap_cmm
+open! Import
 
 (** For the time being, we'll use GHC's calling convention. *)
 val ghc_calling_convention : int
