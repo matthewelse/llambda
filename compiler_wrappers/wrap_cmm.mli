@@ -20,6 +20,7 @@ type machtype_component =
   | Addr
   | Int
   | Float
+[@@deriving sexp_of]
 
 (* - [Val] denotes a valid OCaml value: either a pointer to the beginning
      of a heap block, an infix pointer if it is preceded by the correct
@@ -47,7 +48,7 @@ tracked by the GC:
      into, invalidating the value of the [Addr] variable.
 *)
 
-type machtype = machtype_component option
+type machtype = machtype_component option [@@deriving sexp_of]
 
 val typ_void : machtype
 val typ_val : machtype
@@ -69,6 +70,7 @@ type integer_comparison = Lambda.integer_comparison =
   | Cgt
   | Cle
   | Cge
+[@@deriving sexp_of]
 
 val negate_integer_comparison : integer_comparison -> integer_comparison
 val swap_integer_comparison : integer_comparison -> integer_comparison
@@ -84,17 +86,19 @@ type float_comparison = Lambda.float_comparison =
   | CFnle
   | CFge
   | CFnge
+[@@deriving sexp_of]
 
 val negate_float_comparison : float_comparison -> float_comparison
 val swap_float_comparison : float_comparison -> float_comparison
 
-type label = int
+type label = int [@@deriving sexp_of]
 
 val new_label : unit -> label
 
 type rec_flag =
   | Nonrecursive
   | Recursive
+[@@deriving sexp_of]
 
 type phantom_defining_expr =
   (* CR-soon mshinwell: Convert this to [Targetint.OCaml.t] (or whatever the
@@ -134,6 +138,7 @@ type phantom_defining_expr =
       }
       (** The phantom-let-bound variable points at a block with the given
       structure. *)
+[@@deriving sexp_of]
 
 type memory_chunk =
   | Byte_unsigned
@@ -182,6 +187,7 @@ and operation =
   | Ccmpf of float_comparison
   | Craise of Lambda.raise_kind
   | Ccheckbound
+[@@deriving sexp_of]
 (* Takes two arguments : first the bound to check against,
                    then the index.
                    It results in a bounds error if the index is greater than
@@ -217,10 +223,12 @@ and expression =
       * expression
   | Cexit of int * expression list
   | Ctrywith of expression * Backend_var.With_provenance.t * expression * Debuginfo.t
+[@@deriving sexp_of]
 
 type codegen_option =
   | Reduce_code_size
   | No_CSE
+[@@deriving sexp_of]
 
 type fundecl =
   { fun_name : string
@@ -229,6 +237,7 @@ type fundecl =
   ; fun_codegen_options : codegen_option list
   ; fun_dbg : Debuginfo.t
   }
+[@@deriving sexp_of]
 
 type data_item =
   | Cdefine_symbol of string
@@ -243,10 +252,12 @@ type data_item =
   | Cstring of string
   | Cskip of int
   | Calign of int
+[@@deriving sexp_of]
 
 type phrase =
   | Cfunction of fundecl
   | Cdata of data_item list
+[@@deriving sexp_of]
 
 val ccatch
   :  int

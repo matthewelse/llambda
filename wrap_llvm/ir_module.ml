@@ -7,7 +7,11 @@ let with_module ?target_triple ?data_layout ~ctx name f =
   let t = create_module ctx name in
   Option.iter target_triple ~f:(fun name -> set_target_triple name t);
   Option.iter data_layout ~f:(fun layout -> set_data_layout layout t);
-  Exn.protectx t ~f ~finally:dispose_module
+  (* Annoyingly, Exn.protectx elides backtraces, so avoid this for the time being.
+     {[ Exn.protectx t ~f ~finally:dispose_module ]} *)
+  let result = f t in
+  dispose_module t;
+  result
 ;;
 
 let sexp_of_t t = string_of_llmodule t |> String.sexp_of_t

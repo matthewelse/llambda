@@ -7,17 +7,42 @@ let%expect_test "" =
   let cmm = Trycmm.cmm_of_source ~dump_cmm:false source in
   [%expect {| |}];
   emit cmm;
-  [%expect.unreachable]
-  [@@expect.uncaught_exn
+  [%expect
     {|
-  (* CR expect_test_collector: This test expectation appears to contain a backtrace.
-     This is strongly discouraged as backtraces are fragile.
-     Please change this test to not include a backtrace. *)
+    ("declaring function" (cfundecl.fun_name camlMelse__f_80))
+    ("declaring function" (cfundecl.fun_name camlMelse__entry))
+    ; ModuleID = 'melse'
+    source_filename = "melse"
 
-  (Not_found_s ("Hashtbl.find_exn: not found" x))
-  Raised at Base__Exn.protectx in file "src/exn.ml", line 71, characters 4-114
-  Called from Llambda_test__Test_emit_llvm.(fun) in file "test/test_emit_llvm.ml", line 9, characters 2-10
-  Called from Expect_test_collector.Make.Instance.exec in file "collector/expect_test_collector.ml", line 244, characters 12-19 |}]
+    @0 = global { i64, i8* (i8*)*, i64 } { i64 3063, i8* (i8*)* @camlMelse__f_80, i64 3 }
+    @camlMelse__4 = global i8* bitcast (i8* (i8*)** getelementptr inbounds ({ i64, i8* (i8*)*, i64 }, { i64, i8* (i8*)*, i64 }* @0, i32 0, i32 1) to i8*)
+    @1 = global { i64, i64 } { i64 1792, i64 1 }
+    @camlMelse = global i8* bitcast (i64* getelementptr inbounds ({ i64, i64 }, { i64, i64 }* @1, i32 0, i32 1) to i8*)
+    @2 = global { i8**, i64 } { i8** @camlMelse, i64 0 }
+    @camlMelse__gc_roots = global i8* bitcast ({ i8**, i64 }* @2 to i8*)
+
+    declare i8* @caml_alloc(i64, i32)
+
+    ; Function Attrs: nounwind
+    declare void @llvm.gcroot(i8**, i8*) #0
+
+    define ghccc i8* @camlMelse__f_80(i8* %x) {
+    entry:
+      %0 = ptrtoint i8* %x to i64
+      %1 = add i64 %0, 20
+      ret i64 %1
+    }
+
+    define ghccc i8* @camlMelse__entry() {
+    entry:
+      %0 = alloca i8**
+      store i8** @camlMelse__4, i8*** %0
+      %1 = load i8**, i8*** %0
+      store i8* bitcast (i8** @camlMelse to i8*), i8** %1
+      ret i8* inttoptr (i64 1 to i8*)
+    }
+
+    attributes #0 = { nounwind } |}]
 ;;
 
 let%expect_test "" =

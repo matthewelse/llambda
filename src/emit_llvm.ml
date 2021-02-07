@@ -71,13 +71,14 @@ let type_of_expression ctx env expression =
                      "Tried to compare two floats with different sizes. This seems \
                       sketchy."
                        (lltype1 : Ir_type.t)
-                       (lltype2 : Ir_type.t)]
+                       (lltype2 : Ir_type.t)
+                       (op : Cmm.operation)]
              | _ -> assert false)
     | Cfloatofint -> Cmm.typ_float, Declarations.type_of_machtype ctx Cmm.typ_float
     | Cintoffloat -> Cmm.typ_int, Declarations.type_of_machtype ctx Cmm.typ_int
     | Ccmpf _ -> Cmm.typ_int, i1_type ctx
-    | Craise _ -> raise_s [%message "TODO: handle raising"]
-    | Ccheckbound -> raise_s [%message "idk"]
+    | Craise _ -> raise_s [%message "TODO: handle raising" (op : Cmm.operation)]
+    | Ccheckbound -> raise_s [%message "idk" (op : Cmm.operation)]
   and machtype_of_expression env (expr : Cmm.expression) =
     match expr with
     | Clet (name, value, body) | Clet_mut (name, _, value, body) ->
@@ -91,13 +92,17 @@ let type_of_expression ctx env expression =
     | Cconst_int _ -> Cmm.typ_int, Declarations.type_of_machtype ctx Cmm.typ_int
     | Cconst_natint _ -> Cmm.typ_int, Declarations.type_of_machtype ctx Cmm.typ_int
     | Cconst_float _ -> Cmm.typ_float, Declarations.type_of_machtype ctx Cmm.typ_float
-    | Cphantom_let _ -> raise_s [%message "TODO: handle phantom let bindings."]
+    | Cphantom_let _ ->
+      raise_s [%message "TODO: handle phantom let bindings." (expr : Cmm.expression)]
     | Cop (op, args, _) -> machtype_of_operation op env args
     | Cconst_pointer _ -> Cmm.typ_addr, Declarations.type_of_machtype ctx Cmm.typ_addr
     | Csequence (_, r) -> machtype_of_expression env r
     | Cifthenelse (_, _, then_, _, else_, _) ->
       unify (machtype_of_expression env then_) (machtype_of_expression env else_)
-    | _ -> raise_s [%message "Trying to find type for unknown expression type."]
+    | _ ->
+      raise_s
+        [%message
+          "Trying to find type for unknown expression type." (expr : Cmm.expression)]
   in
   machtype_of_expression env expression |> snd
 ;;
@@ -106,25 +111,27 @@ let to_integer_if_pointer ~ctx ~builder value =
   match classify_type (type_of value) with
   | Pointer -> build_ptrtoint value (i64_type ctx) "" builder
   | Integer -> value
-  | _ -> failwith "idk"
+  | _ -> raise_s [%message "I don't know how to handle this" (value : Ir_value.t)]
 ;;
 
 let to_pointer_if_integer ~builder ~typ value =
   match classify_type (type_of value) with
   | Pointer -> build_pointercast value typ "" builder
   | Integer -> build_inttoptr value typ "" builder
-  | _ -> failwith "idk"
+  | _ -> raise_s [%message "I don't know how to handle this" (value : Ir_value.t)]
 ;;
 
 type t =
-  { ctx : llcontext
-  ; builder : llbuilder
-  ; this_module : llmodule
+  { ctx : Ir_context.t
+  ; builder : Ir_builder.t
+  ; this_module : Ir_module.t
   ; env :
-      [ `Mutable of llvalue | `Immutable of llvalue | `Value of llvalue ] String.Table.t
-  ; fundecl : llvalue
-  ; catches : llbasicblock Int.Table.t
+      [ `Mutable of Ir_value.t | `Immutable of Ir_value.t | `Value of Ir_value.t ]
+      String.Table.t
+  ; fundecl : Ir_value.t
+  ; catches : Ir_basic_block.t Int.Table.t
   }
+[@@deriving sexp_of]
 
 let rec codegen_expr t (expr : Cmm.expression) =
   match expr with
@@ -432,7 +439,13 @@ and codegen_operation t operation args (_ : Debug_info.t) =
 ;;
 
 let type_of_function ctx (fundecl : Cmm.fundecl) =
-  let return_type = type_of_expression ctx (String.Table.create ()) fundecl.fun_body in
+  let env = String.Table.create () in
+  List.iter fundecl.fun_args ~f:(fun (name, machtype) ->
+      String.Table.add_exn
+        env
+        ~key:(Backend_var.With_provenance.name name)
+        ~data:(machtype, Declarations.type_of_machtype ctx machtype));
+  let return_type = type_of_expression ctx env fundecl.fun_body in
   let args =
     List.map fundecl.fun_args ~f:(fun (_, machtype) ->
         Declarations.type_of_machtype ctx machtype)
