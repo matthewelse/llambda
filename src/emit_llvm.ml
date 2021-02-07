@@ -1,6 +1,5 @@
 open! Core
 open! Import
-
 module Backend_var = Ocaml_optcomp.Backend_var
 module Debug_info = Ocaml_common.Debuginfo
 
@@ -389,7 +388,7 @@ and codegen_operation t operation args (_ : Debug_info.t) =
     | _ ->
       string_of_llvalue left |> print_endline;
       string_of_llvalue right |> print_endline;
-      failwith ("don't know how to build this comparison."))
+      failwith "don't know how to build this comparison.")
   | Calloc, data ->
     let ptr_ptr (* : val pointer *) =
       build_alloca (pointer_type (i8_type t.ctx)) "" t.builder

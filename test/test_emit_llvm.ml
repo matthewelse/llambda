@@ -7,42 +7,17 @@ let%expect_test "" =
   let cmm = Trycmm.cmm_of_source ~dump_cmm:false source in
   [%expect {| |}];
   emit cmm;
-  [%expect
+  [%expect.unreachable]
+  [@@expect.uncaught_exn
     {|
-    ; ModuleID = 'melse'
-    source_filename = "melse"
+  (* CR expect_test_collector: This test expectation appears to contain a backtrace.
+     This is strongly discouraged as backtraces are fragile.
+     Please change this test to not include a backtrace. *)
 
-    @camlMelse__3 = global i64 3
-    @0 = global { i64, i64 } { i64 3063, i64 3 }
-    @camlMelse = global i64 1
-    @camlMelse.1 = global i64 1
-    @1 = global { i64, i64 } { i64 1792, i64 1 }
-    @camlMelse__gc_roots = global i64 0
-    @camlMelse__gc_roots.2 = global i64 0
-    @2 = global i64 0
-
-    declare i8* @caml_alloc(i64, i32)
-
-    ; Function Attrs: nounwind
-    declare void @llvm.gcroot(i8**, i8*) #0
-
-    define i64 @camlMelse__f_80(i8* %x) gc "ocaml" {
-    entry:
-      %0 = ptrtoint i8* %x to i64
-      %1 = add i64 %0, 20
-      ret i64 %1
-    }
-
-    define i8* @camlMelse__entry() gc "ocaml" {
-    entry:
-      %0 = alloca i64*
-      store i64* @camlMelse__3, i64** %0
-      %1 = load i64*, i64** %0
-      store i64* @camlMelse, i64* %1
-      ret i8* inttoptr (i64 1 to i8*)
-    }
-
-    attributes #0 = { nounwind } |}]
+  (Not_found_s ("Hashtbl.find_exn: not found" x))
+  Raised at Base__Exn.protectx in file "src/exn.ml", line 71, characters 4-114
+  Called from Llambda_test__Test_emit_llvm.(fun) in file "test/test_emit_llvm.ml", line 9, characters 2-10
+  Called from Expect_test_collector.Make.Instance.exec in file "collector/expect_test_collector.ml", line 244, characters 12-19 |}]
 ;;
 
 let%expect_test "" =
@@ -52,26 +27,25 @@ let%expect_test "" =
   emit cmm;
   [%expect
     {|
-    i8* %x
-    i64 8
+    ("declaring function" (cfundecl.fun_name camlMelse__sum_80))
+    ("declaring function" (cfundecl.fun_name camlMelse__entry))
+    ("function call" (types (Val)) "i8* (i8*)")
     ; ModuleID = 'melse'
     source_filename = "melse"
 
-    @camlMelse__4 = global i64 3
-    @0 = global { i64, i64 } { i64 3063, i64 3 }
-    @camlMelse = global i64 1
-    @camlMelse.1 = global i64 1
+    @0 = global { i64, i8* (i8*)*, i64 } { i64 3063, i8* (i8*)* @camlMelse__sum_80, i64 3 }
+    @camlMelse__5 = global i8* bitcast (i8* (i8*)** getelementptr inbounds ({ i64, i8* (i8*)*, i64 }, { i64, i8* (i8*)*, i64 }* @0, i32 0, i32 1) to i8*)
     @1 = global { i64, i64 } { i64 1792, i64 1 }
-    @camlMelse__gc_roots = global i64 0
-    @camlMelse__gc_roots.2 = global i64 0
-    @2 = global i64 0
+    @camlMelse = global i8* bitcast (i64* getelementptr inbounds ({ i64, i64 }, { i64, i64 }* @1, i32 0, i32 1) to i8*)
+    @2 = global { i8**, i64 } { i8** @camlMelse, i64 0 }
+    @camlMelse__gc_roots = global i8* bitcast ({ i8**, i64 }* @2 to i8*)
 
     declare i8* @caml_alloc(i64, i32)
 
     ; Function Attrs: nounwind
     declare void @llvm.gcroot(i8**, i8*) #0
 
-    define i64 @camlMelse__sum_80(i8* %x) gc "ocaml" {
+    define ghccc i8* @camlMelse__sum_80(i8* %x) {
     entry:
       %0 = ptrtoint i8* %x to i64
       %1 = sub i64 %0, 1
@@ -86,25 +60,26 @@ let%expect_test "" =
       %7 = getelementptr i8, i8* %x, i64 8
       %8 = bitcast i8* %7 to i8**
       %9 = load i8*, i8** %8
-      %10 = call i64 @camlMelse__sum_80(i8* %9)
-      %11 = add i64 %6, %10
-      %12 = add i64 %11, -1
+      %10 = call ghccc i8* @camlMelse__sum_80(i8* %9)
+      %11 = ptrtoint i8* %10 to i64
+      %12 = add i64 %6, %11
+      %13 = add i64 %12, -1
       br label %merge
 
     else:                                             ; preds = %entry
       br label %merge
 
     merge:                                            ; preds = %else, %then
-      %iftmp = phi i64 [ 1, %else ], [ %12, %then ]
+      %iftmp = phi i64 [ 1, %else ], [ %13, %then ]
       ret i64 %iftmp
     }
 
-    define i8* @camlMelse__entry() gc "ocaml" {
+    define ghccc i8* @camlMelse__entry() {
     entry:
-      %0 = alloca i64*
-      store i64* @camlMelse__4, i64** %0
-      %1 = load i64*, i64** %0
-      store i64* @camlMelse, i64* %1
+      %0 = alloca i8**
+      store i8** @camlMelse__5, i8*** %0
+      %1 = load i8**, i8*** %0
+      store i8* bitcast (i8** @camlMelse to i8*), i8** %1
       ret i8* inttoptr (i64 1 to i8*)
     }
 
@@ -121,24 +96,25 @@ let create x y z = { x; y; z } |}
   emit cmm;
   [%expect
     {|
+    ("declaring function" (cfundecl.fun_name camlMelse__create_84))
+    ("declaring function" (cfundecl.fun_name camlMelse__entry))
     ; ModuleID = 'melse'
     source_filename = "melse"
 
-    @camlMelse__5 = global i64 7
-    @0 = global { i64, i64 } { i64 4087, i64 7 }
-    @camlMelse = global i64 1
-    @camlMelse.1 = global i64 1
+    @caml_curry3 = external global i8*
+    @0 = global { i64, i8**, i64, i8* (i8*, i8*, i8*)* } { i64 4087, i8** @caml_curry3, i64 7, i8* (i8*, i8*, i8*)* @camlMelse__create_84 }
+    @camlMelse__6 = global i8* bitcast (i8*** getelementptr inbounds ({ i64, i8**, i64, i8* (i8*, i8*, i8*)* }, { i64, i8**, i64, i8* (i8*, i8*, i8*)* }* @0, i32 0, i32 1) to i8*)
     @1 = global { i64, i64 } { i64 1792, i64 1 }
-    @camlMelse__gc_roots = global i64 0
-    @camlMelse__gc_roots.2 = global i64 0
-    @2 = global i64 0
+    @camlMelse = global i8* bitcast (i64* getelementptr inbounds ({ i64, i64 }, { i64, i64 }* @1, i32 0, i32 1) to i8*)
+    @2 = global { i8**, i64 } { i8** @camlMelse, i64 0 }
+    @camlMelse__gc_roots = global i8* bitcast ({ i8**, i64 }* @2 to i8*)
 
     declare i8* @caml_alloc(i64, i32)
 
     ; Function Attrs: nounwind
     declare void @llvm.gcroot(i8**, i8*) #0
 
-    define i8* @camlMelse__create_84(i8* %x, i8* %y, i8* %z) gc "ocaml" {
+    define ghccc i8* @camlMelse__create_84(i8* %x, i8* %y, i8* %z) {
     entry:
       %0 = alloca i8*
       %1 = call i8* @caml_alloc(i64 4, i32 0)
@@ -147,12 +123,12 @@ let create x y z = { x; y; z } |}
       ret i8* %1
     }
 
-    define i8* @camlMelse__entry() gc "ocaml" {
+    define ghccc i8* @camlMelse__entry() {
     entry:
-      %0 = alloca i64*
-      store i64* @camlMelse__5, i64** %0
-      %1 = load i64*, i64** %0
-      store i64* @camlMelse, i64* %1
+      %0 = alloca i8**
+      store i8** @camlMelse__6, i8*** %0
+      %1 = load i8**, i8*** %0
+      store i8* bitcast (i8** @camlMelse to i8*), i8** %1
       ret i8* inttoptr (i64 1 to i8*)
     }
 
