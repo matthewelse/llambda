@@ -9,17 +9,6 @@ let%expect_test "" =
   emit_llvm cmm;
   [%expect
     {|
-    ("function args" (name camlMelse__f_80) (args ((x (Value "i8* %x")))))
-    ("function args" (name camlMelse__entry) (args ()))
-    ("function args" (name caml_program) (args ()))
-    ("function args" (name caml_apply3)
-     (args
-      ((arg (Value "i8* %arg")) (arg1 (Value "i8* %arg1"))
-       (arg2 (Value "i8* %arg2")) (clos (Value "i8* %clos")))))
-    ("function args" (name caml_apply2)
-     (args
-      ((arg (Value "i8* %arg")) (arg1 (Value "i8* %arg1"))
-       (clos (Value "i8* %clos")))))
     ; ModuleID = 'melse'
     source_filename = "melse"
     target triple = "x86_64-apple-darwin19.6.0"
@@ -225,17 +214,6 @@ let%expect_test "" =
   emit_llvm cmm;
   [%expect
     {|
-    ("function args" (name camlMelse__sum_80) (args ((x (Value "i8* %x")))))
-    ("function args" (name camlMelse__entry) (args ()))
-    ("function args" (name caml_program) (args ()))
-    ("function args" (name caml_apply3)
-     (args
-      ((arg (Value "i8* %arg")) (arg1 (Value "i8* %arg1"))
-       (arg2 (Value "i8* %arg2")) (clos (Value "i8* %clos")))))
-    ("function args" (name caml_apply2)
-     (args
-      ((arg (Value "i8* %arg")) (arg1 (Value "i8* %arg1"))
-       (clos (Value "i8* %clos")))))
     ; ModuleID = 'melse'
     source_filename = "melse"
     target triple = "x86_64-apple-darwin19.6.0"
@@ -466,18 +444,6 @@ let create x y z = { x; y; z } |}
   emit_llvm cmm;
   [%expect
     {|
-    ("function args" (name camlMelse__create_84)
-     (args ((x (Value "i8* %x")) (y (Value "i8* %y")) (z (Value "i8* %z")))))
-    ("function args" (name camlMelse__entry) (args ()))
-    ("function args" (name caml_program) (args ()))
-    ("function args" (name caml_apply3)
-     (args
-      ((arg (Value "i8* %arg")) (arg1 (Value "i8* %arg1"))
-       (arg2 (Value "i8* %arg2")) (clos (Value "i8* %clos")))))
-    ("function args" (name caml_apply2)
-     (args
-      ((arg (Value "i8* %arg")) (arg1 (Value "i8* %arg1"))
-       (clos (Value "i8* %clos")))))
     ; ModuleID = 'melse'
     source_filename = "melse"
     target triple = "x86_64-apple-darwin19.6.0"

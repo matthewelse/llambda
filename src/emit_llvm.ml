@@ -517,14 +517,10 @@ let value_of_data_item this_module ctx (data_item : Cmm.data_item) =
   | Cskip _ | Calign _ -> None
 ;;
 
-let rec structify ~ctx ~this_module (items : Cmm.data_item list) =
-  match items with
-  | [] -> []
-  | (Cdefine_symbol _ | Cglobal_symbol _) :: xs -> structify ~ctx ~this_module xs
-  | value :: xs ->
-    (match value_of_data_item this_module ctx value with
-    | None -> structify ~this_module ~ctx xs
-    | Some value -> value :: structify ~this_module ~ctx xs)
+let structify ~ctx ~this_module (items : Cmm.data_item list) =
+  List.filter_map items ~f:(function
+      | Cdefine_symbol _ | Cglobal_symbol _ | Cskip _ | Calign _ -> None
+      | other -> value_of_data_item this_module ctx other)
 ;;
 
 let emit ~ctx ~this_module (cmm : Cmm.phrase list) =
@@ -559,6 +555,10 @@ let emit ~ctx ~this_module (cmm : Cmm.phrase list) =
         let rec pointers ~index ~pointer (items : Cmm.data_item list) =
           match items with
           | [] -> []
+          | [ Cdefine_symbol name ] ->
+            [ Linkage.Common, name, Llvm.const_null (pointer_type (i8_type ctx)) ]
+          | [ Cglobal_symbol name ] ->
+            [ Linkage.External, name, Llvm.const_null (pointer_type (i8_type ctx)) ]
           | Cdefine_symbol name :: xs ->
             let ptr = build_struct_gep pointer index name builder in
             let ptr =
@@ -598,7 +598,6 @@ let emit ~ctx ~this_module (cmm : Cmm.phrase list) =
           List.iter pointers ~f:(fun (linkage, name, route) ->
               let glob = Ir_module.define_global this_module ~name route in
               set_linkage linkage glob)));
-  (* Compile the functions and globals. *)
   List.iter cmm ~f:(function
       | Cfunction cfundecl ->
         let fundecl = Ir_module.lookup_function_exn this_module ~name:cfundecl.fun_name in
@@ -614,11 +613,6 @@ let emit ~ctx ~this_module (cmm : Cmm.phrase list) =
               set_value_name real_name arg;
               value_name arg, `Value arg)
         in
-        eprint_s
-          [%message
-            "function args"
-              ~name:cfundecl.fun_name
-              (args : (string * [ `Value of Ir_value.t ]) list)];
         let env = String.Table.of_alist_exn args in
         let catches = Int.Table.create () in
         String.Table.add_exn env ~key:cfundecl.fun_name ~data:(`Value fundecl);

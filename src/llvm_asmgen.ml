@@ -66,7 +66,7 @@ let assemble_llvm_ir infile outfile =
     printer doesn't die *)
     Ccomp.command
       ("/usr/local/opt/llvm@10/bin/opt -S -O3"
-      ^ " -o While.ll"
+      ^ " -o Hello_world.ll"
       ^ " "
       ^ Filename.quote infile)
   in
@@ -78,7 +78,7 @@ let assemble_llvm_ir infile outfile =
       ^ String.concat " " (Misc.debug_prefix_map_flags ())
       ^ " -o "
       ^ Filename.quote outfile
-      ^ " While.ll" (* urgh LLVM uses the filename as the module name :( *))
+      ^ " Hello_world.ll" (* urgh LLVM uses the filename as the module name :( *))
   else result
 ;;
 

@@ -8,6 +8,14 @@ module Backend_intf = B
 module Cmm = struct
   include Ocaml_optcomp.Cmm
 
+  let sexp_of_phrase t =
+    let s =
+      Ocaml_optcomp.Printcmm.phrase Format.str_formatter t;
+      Format.flush_str_formatter ()
+    in
+    Sexp.Atom s
+  ;;
+
   let sexp_of_expression t =
     let s =
       Ocaml_optcomp.Printcmm.expression Format.str_formatter t;
