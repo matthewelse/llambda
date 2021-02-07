@@ -6,7 +6,7 @@ let%expect_test "" =
   let source = {| let f x = 10 + x;; |} in
   let cmm = Trycmm.cmm_of_source ~dump_cmm:false source in
   [%expect {| |}];
-  emit cmm;
+  emit_llvm cmm;
   [%expect
     {|
     ("function args" (name camlMelse__f_80) (args ((x (Value "i8* %x")))))
@@ -222,7 +222,7 @@ let%expect_test "" =
   let source = {| let rec sum x = match x with | [] -> 0 | x :: xs -> x + (sum xs);; |} in
   let cmm = Trycmm.cmm_of_source ~dump_cmm:false source in
   [%expect {| |}];
-  emit cmm;
+  emit_llvm cmm;
   [%expect
     {|
     ("function args" (name camlMelse__sum_80) (args ((x (Value "i8* %x")))))
@@ -463,7 +463,7 @@ let create x y z = { x; y; z } |}
   in
   let cmm = Trycmm.cmm_of_source ~dump_cmm:false source in
   [%expect {| |}];
-  emit cmm;
+  emit_llvm cmm;
   [%expect
     {|
     ("function args" (name camlMelse__create_84)

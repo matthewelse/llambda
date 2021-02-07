@@ -54,7 +54,7 @@ module Optcompile = struct
            let code = Simplif.simplify_lambda program.Lambda.code in
            { program with Lambda.code }
            |> print_if i.ppf_dump Clflags.dump_lambda Printlambda.program
-           |> Asmgen.compile_implementation
+           |> Llvm_asmgen.compile_implementation
                 ~backend
                 ~filename:i.source_file
                 ~prefixname:i.output_prefix

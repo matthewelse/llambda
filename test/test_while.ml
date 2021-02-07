@@ -3,7 +3,7 @@ open! Core
 
 module Trycmm = Llambda.Trycmm
 
-let emit = Llambda.Emit_llvm.emit
+let emit = Llambda.Emit_llvm.emit_llvm
 
 let%expect_test "while example" =
   let code =

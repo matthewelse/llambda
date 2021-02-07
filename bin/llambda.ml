@@ -10,7 +10,7 @@ let command =
       fun () ->
         let source_code = In_channel.read_all filename in
         let cmm = Llambda.Trycmm.cmm_of_source ~dump_cmm:dcmm source_code in
-        Llambda.Emit_llvm.emit cmm]
+        Llambda.Emit_llvm.emit_llvm cmm]
 ;;
 
 let () = Command.run command

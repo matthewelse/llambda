@@ -480,122 +480,127 @@ let rec structify ~ctx ~this_module (items : Cmm.data_item list) =
     | Some value -> value :: structify ~this_module ~ctx xs)
 ;;
 
-let emit (cmm : Cmm.phrase list) =
-  let ctx = Ir_context.global () in
-  Ir_module.with_module ~ctx "melse" (fun this_module ->
-      set_target_triple "x86_64-apple-macosx10.15.0" this_module;
-      let builder = Ir_builder.create ctx in
-      List.iter (Declarations.builtin_functions ctx) ~f:(fun (name, funtype) ->
-          Ir_module.declare_function' this_module ~name ~funtype);
-      (* Pre-define functions and globals to avoid issues with ordering. *)
-      List.iter cmm ~f:(function
-          | Cfunction cfundecl ->
-            (* It seems kind of strange that we don't always return a value here... *)
-            let function_type = type_of_function ctx cfundecl in
-            Ir_module.declare_function'
-              this_module
+let emit ~ctx ~this_module (cmm : Cmm.phrase list) =
+  let builder = Ir_builder.create ctx in
+  List.iter (Declarations.builtin_functions ctx) ~f:(fun (name, funtype) ->
+      Ir_module.declare_function' this_module ~name ~funtype);
+  (* Pre-define functions and globals to avoid issues with ordering. *)
+  List.iter cmm ~f:(function
+      | Cfunction cfundecl ->
+        (* It seems kind of strange that we don't always return a value here... *)
+        let function_type = type_of_function ctx cfundecl in
+        Ir_module.declare_function'
+          this_module
+          ~name:cfundecl.fun_name
+          ~funtype:function_type
+      | Cdata _ -> ());
+  List.iter cmm ~f:(function
+      | Cfunction _ -> ()
+      | Cdata items ->
+        let global_names =
+          List.filter_map items ~f:(function
+              | Cglobal_symbol name -> Some name
+              | _ -> None)
+          |> String.Set.of_list
+        in
+        let items =
+          List.filter items ~f:(function
+              | Cdefine_symbol name -> not (String.Set.mem global_names name)
+              | _ -> true)
+        in
+        let rec pointers ~index ~pointer (items : Cmm.data_item list) =
+          match items with
+          | [] -> []
+          | Cdefine_symbol name :: xs ->
+            let ptr = build_struct_gep pointer index name builder in
+            let ptr =
+              build_pointercast
+                ptr
+                (Declarations.type_of_machtype ctx [| Addr |])
+                ""
+                builder
+            in
+            (Linkage.External, name, ptr) :: pointers ~index ~pointer xs
+          | Cglobal_symbol name :: xs ->
+            let ptr = build_struct_gep pointer index name builder in
+            let ptr =
+              build_pointercast
+                ptr
+                (Declarations.type_of_machtype ctx [| Addr |])
+                ""
+                builder
+            in
+            (External, name, ptr) :: pointers ~index ~pointer xs
+          | value :: xs ->
+            (match value_of_data_item this_module ctx value with
+            | None -> pointers ~index ~pointer xs
+            | Some _ -> pointers ~index:(index + 1) ~pointer xs)
+        in
+        let glob_value =
+          match structify ~ctx ~this_module items with
+          | [] -> None
+          | elems -> Some (const_struct ctx (Array.of_list elems))
+        in
+        (match glob_value with
+        | None -> ()
+        | Some glob_value ->
+          let anon_global = define_global "" glob_value this_module in
+          set_linkage External anon_global;
+          let pointers = pointers ~index:0 ~pointer:anon_global items in
+          List.iter pointers ~f:(fun (linkage, name, route) ->
+              let glob = Ir_module.define_global this_module ~name route in
+              set_linkage linkage glob)));
+  (* Compile the functions and globals. *)
+  List.iter cmm ~f:(function
+      | Cfunction cfundecl ->
+        let fundecl = Ir_module.lookup_function_exn this_module ~name:cfundecl.fun_name in
+        set_function_call_conv Declarations.ghc_calling_convention fundecl;
+        (* set_gc (Some "ocaml") fundecl; *)
+        (* set argument names *)
+        let args =
+          List.map2_exn
+            (params fundecl |> Array.to_list)
+            cfundecl.fun_args
+            ~f:(fun arg (name, _) ->
+              let real_name = Backend_var.With_provenance.name name in
+              set_value_name real_name arg;
+              value_name arg, `Value arg)
+        in
+        eprint_s
+          [%message
+            "function args"
               ~name:cfundecl.fun_name
-              ~funtype:function_type
-          | Cdata _ -> ());
-      List.iter cmm ~f:(function
-          | Cfunction _ -> ()
-          | Cdata items ->
-            let global_names =
-              List.filter_map items ~f:(function
-                  | Cglobal_symbol name -> Some name
-                  | _ -> None)
-              |> String.Set.of_list
-            in
-            let items =
-              List.filter items ~f:(function
-                  | Cdefine_symbol name -> not (String.Set.mem global_names name)
-                  | _ -> true)
-            in
-            let rec pointers ~index ~pointer (items : Cmm.data_item list) =
-              match items with
-              | [] -> []
-              | Cdefine_symbol name :: xs ->
-                let ptr = build_struct_gep pointer index name builder in
-                let ptr =
-                  build_pointercast
-                    ptr
-                    (Declarations.type_of_machtype ctx [| Addr |])
-                    ""
-                    builder
-                in
-                (Linkage.External, name, ptr) :: pointers ~index ~pointer xs
-              | Cglobal_symbol name :: xs ->
-                let ptr = build_struct_gep pointer index name builder in
-                let ptr =
-                  build_pointercast
-                    ptr
-                    (Declarations.type_of_machtype ctx [| Addr |])
-                    ""
-                    builder
-                in
-                (External, name, ptr) :: pointers ~index ~pointer xs
-              | value :: xs ->
-                (match value_of_data_item this_module ctx value with
-                | None -> pointers ~index ~pointer xs
-                | Some _ -> pointers ~index:(index + 1) ~pointer xs)
-            in
-            let glob_value =
-              match structify ~ctx ~this_module items with
-              | [] -> None
-              | elems -> Some (const_struct ctx (Array.of_list elems))
-            in
-            (match glob_value with
-            | None -> ()
-            | Some glob_value ->
-              let anon_global = define_global "" glob_value this_module in
-              set_linkage External anon_global;
-              let pointers = pointers ~index:0 ~pointer:anon_global items in
-              List.iter pointers ~f:(fun (linkage, name, route) ->
-                  let glob = Ir_module.define_global this_module ~name route in
-                  set_linkage linkage glob)));
-      (* Compile the functions and globals. *)
-      List.iter cmm ~f:(function
-          | Cfunction cfundecl ->
-            let fundecl =
-              Ir_module.lookup_function_exn this_module ~name:cfundecl.fun_name
-            in
-            set_function_call_conv Declarations.ghc_calling_convention fundecl;
-            (* set_gc (Some "ocaml") fundecl; *)
-            (* set argument names *)
-            let args =
-              List.map2_exn
-                (params fundecl |> Array.to_list)
-                cfundecl.fun_args
-                ~f:(fun arg (name, _) ->
-                  let real_name = Backend_var.With_provenance.name name in
-                  set_value_name real_name arg;
-                  value_name arg, `Value arg)
-            in
-            eprint_s
-              [%message
-                "function args"
-                  ~name:cfundecl.fun_name
-                  (args : (string * [ `Value of Ir_value.t ]) list)];
-            let env = String.Table.of_alist_exn args in
-            let catches = Int.Table.create () in
-            String.Table.add_exn env ~key:cfundecl.fun_name ~data:(`Value fundecl);
-            let entry = append_block ctx "entry" fundecl in
-            position_at_end entry builder;
-            (try
-               let ret_val =
-                 codegen_expr
-                   { ctx; builder; env; this_module; fundecl; catches }
-                   cfundecl.fun_body
-               in
-               build_ret ret_val builder |> (ignore : llvalue -> unit)
-             with
-            | exn ->
-              delete_function fundecl;
-              raise_s
-                [%message
-                  "exception raised while compiling function"
-                    ~name:(cfundecl.fun_name : string)
-                    (exn : Exn.t)])
-          | Cdata _ -> ());
+              (args : (string * [ `Value of Ir_value.t ]) list)];
+        let env = String.Table.of_alist_exn args in
+        let catches = Int.Table.create () in
+        String.Table.add_exn env ~key:cfundecl.fun_name ~data:(`Value fundecl);
+        let entry = append_block ctx "entry" fundecl in
+        position_at_end entry builder;
+        (try
+           let ret_val =
+             codegen_expr
+               { ctx; builder; env; this_module; fundecl; catches }
+               cfundecl.fun_body
+           in
+           build_ret ret_val builder |> (ignore : llvalue -> unit)
+         with
+        | exn ->
+          delete_function fundecl;
+          raise_s
+            [%message
+              "exception raised while compiling function"
+                ~name:(cfundecl.fun_name : string)
+                (exn : Exn.t)])
+      | Cdata _ -> ())
+;;
+
+let emit_llvm phrases =
+  let ctx = Llvm.global_context () in
+  Ir_module.with_module
+    ~target_triple:"x86_64-apple-darwin19.6.0"
+    ~ctx
+    "melse"
+    (fun this_module ->
+      emit ~this_module ~ctx phrases;
       string_of_llmodule this_module |> print_endline)
 ;;
