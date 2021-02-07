@@ -125,7 +125,7 @@ module Backend = struct
                 (exported : bool)
                 (tag : int)
                 (field_count : int)]));
-    let cmm = Cmmgen.compunit clambda in
+    let cmm = Ocaml_optcomp.Cmmgen.compunit clambda in
     (* if t.dump_cmm then List.iter cmm ~f:(Printcmm.phrase Format.std_formatter); *)
     cmm
   ;;
