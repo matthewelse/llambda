@@ -38,7 +38,6 @@ module Frontend = struct
   ;;
 
   let type_impl t structure =
-    Compmisc.init_path ();
     Env.set_unit_name (module_name t);
     let env = Compmisc.initial_env () in
     let typed =
@@ -93,6 +92,11 @@ module Backend = struct
     then (
       Printlambda.lambda Format.std_formatter code;
       print_endline "");
+    (* Ident.Set.iter
+      (fun ident ->
+        eprint_s [%message "Required global identifier" ~ident:(Ident.name ident)];
+        Compilenv.require_global ident)
+      lambda.required_globals; *)
     let clambda =
       Closure_middle_end.lambda_to_clambda
         ~backend:Decls.backend
@@ -108,17 +112,17 @@ module Backend = struct
       List.iter
         structured_constants
         ~f:(fun { symbol; exported; definition; provenance = _ } ->
-          print_s [%message "structured constant" (symbol : string) (exported : bool)];
+          eprint_s [%message "structured constant" (symbol : string) (exported : bool)];
           match definition with
           | Uconst_block (length, constants) ->
             let len = List.length constants in
-            print_s [%message "block" (length : int) (len : int)]
-          | _ -> print_s [%message "other"]);
+            eprint_s [%message "block" (length : int) (len : int)]
+          | _ -> eprint_s [%message "other"]);
       List.iter
         preallocated_blocks
         ~f:(fun { symbol; exported; tag; fields; provenance = _ } ->
           let field_count = List.length fields in
-          print_s
+          eprint_s
             [%message
               "preallocated block"
                 (symbol : string)
@@ -126,13 +130,16 @@ module Backend = struct
                 (tag : int)
                 (field_count : int)]));
     let cmm = Ocaml_optcomp.Cmmgen.compunit clambda in
+    (* Generate generic functions: curry/apply/tuplify etc *)
+    let cmm' = Ocaml_optcomp.Cmm_helpers.generic_functions true [Compilenv.current_unit_infos ()] in
     (* if t.dump_cmm then List.iter cmm ~f:(Printcmm.phrase Format.std_formatter); *)
-    cmm
+    cmm @ cmm'
   ;;
 end
 
 let cmm_of_source ~dump_cmm source =
   Compilenv.reset "Melse";
+  Compmisc.init_path ();
   let config : Frontend.t =
     { source_prefix = "melse"; dump_ast = false; dump_typed_ast = false }
   in
