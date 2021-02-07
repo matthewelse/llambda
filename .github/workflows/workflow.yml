@@ -1,0 +1,51 @@
+name: Main workflow
+
+on:
+  - pull_request
+  - push
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-latest
+          # - ubuntu-latest
+          # - windows-latest
+        ocaml-version:
+          - 4.11.0
+        llvm-version:
+          - 10.0
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Use OCaml ${{ matrix.ocaml-version }}
+        uses: avsm/setup-ocaml@v1
+        with:
+          ocaml-version: ${{ matrix.ocaml-version }}
+
+      - name: Cache LLVM and Clang
+        id: cache-llvm
+        uses: actions/cache@v2
+        with:
+          path: ${{ runner.temp }}/llvm
+          key: llvm-10.0
+      
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v1.1.0
+        with:
+          version: ${{ matrix.llvm-version }}
+          directory: ${{ runner.temp }}/llvm
+          cached: ${{ steps.cache-llvm.outputs.cache-hit }}
+
+      - run: opam install dune llvm ocaml-compiler-libs core ppx_jane ppx_inline_test
+
+      - run: opam exec -- dune build
+
+      - run: opam exec -- dune runtest
+
