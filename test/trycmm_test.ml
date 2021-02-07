@@ -194,25 +194,7 @@ let%expect_test "" =
              (setfield_ptr(root-init) 0 (read_symbol camlMelse)
                (offset clos/86 0)))
            0a)
-    ("preallocated block" (symbol caml) (exported true) (tag 0) (field_count 1))
-    (data)(data int 3063 "caml__2": addr "caml__sum_80" int 3)(data
-                                                               int 1792
-                                                               global "caml"
-                                                               "caml":
-                                                               int 1)(data
-                                                                      global "caml__gc_roots"
-                                                                      "caml__gc_roots":
-                                                                      addr "caml"
-                                                                      int 0)
-    (function{:1,13-65} caml__sum_80 (x/81: val)
-     (if (!= x/81 1)
-       (+
-         (+ (load_mut val x/81)
-           (app{:1,57-65} "caml__sum_80" (load_mut val (+a x/81 8)) val))
-         -1)
-       1))
-    (function caml__entry ()
-     (let clos/86 "caml__2" (store val(root-init) "camlMelse" clos/86)) 1a) |}];
+    ("preallocated block" (symbol caml) (exported true) (tag 0) (field_count 1)) |}];
   List.iter cmm ~f:(function
       | Cfunction { fun_name; _ } -> print_s [%message "fundecl" (fun_name : string)]
       | Cdata items ->
