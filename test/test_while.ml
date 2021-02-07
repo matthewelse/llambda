@@ -36,7 +36,7 @@ let%expect_test "while example" =
        (clos (Value "i8* %clos")))))
     ; ModuleID = 'melse'
     source_filename = "melse"
-    target triple = "x86_64-apple-macosx10.15.0"
+    target triple = "x86_64-apple-darwin19.6.0"
 
     @0 = global { i64, i64 (i8*)*, i64 } { i64 3063, i64 (i8*)* @camlMelse__f_80, i64 3 }
     @camlMelse__27 = global i8* bitcast (i64 (i8*)** getelementptr inbounds ({ i64, i64 (i8*)*, i64 }, { i64, i64 (i8*)*, i64 }* @0, i32 0, i32 1) to i8*)
@@ -118,7 +118,7 @@ let%expect_test "while example" =
     ; Function Attrs: nounwind
     declare void @llvm.gcroot(i8**, i8*) #0
 
-    define ghccc i64 @camlMelse__f_80(i8* %n) {
+    define ghccc i64 @camlMelse__f_80(i8* %n) gc "ocaml" {
     entry:
       %0 = alloca i64
       store i64 1, i64* %0
@@ -151,7 +151,7 @@ let%expect_test "while example" =
       br label %handler.2
     }
 
-    define ghccc i8* @camlMelse__entry() {
+    define ghccc i8* @camlMelse__entry() gc "ocaml" {
     entry:
       %0 = alloca i8*
       store i8* bitcast (i8** @camlMelse__27 to i8*), i8** %0
@@ -160,7 +160,7 @@ let%expect_test "while example" =
       ret i8* inttoptr (i64 1 to i8*)
     }
 
-    define ghccc i64 @caml_program() {
+    define ghccc i64 @caml_program() gc "ocaml" {
     entry:
       call ghccc void bitcast (i8* ()* @camlMelse__entry to void ()*)()
       %0 = load i64, i64* bitcast (i8** @caml_globals_inited to i64*)
@@ -169,7 +169,7 @@ let%expect_test "while example" =
       ret i64 1
     }
 
-    define ghccc i8* @caml_apply3(i8* %arg, i8* %arg1, i8* %arg2, i8* %clos) {
+    define ghccc i8* @caml_apply3(i8* %arg, i8* %arg1, i8* %arg2, i8* %clos) gc "ocaml" {
     entry:
       %0 = getelementptr i8, i8* %clos, i64 8
       %1 = bitcast i8* %0 to i8**
@@ -216,7 +216,7 @@ let%expect_test "while example" =
       ret i8* %iftmp
     }
 
-    define ghccc i8* @caml_apply2(i8* %arg, i8* %arg1, i8* %clos) {
+    define ghccc i8* @caml_apply2(i8* %arg, i8* %arg1, i8* %clos) gc "ocaml" {
     entry:
       %0 = getelementptr i8, i8* %clos, i64 8
       %1 = bitcast i8* %0 to i8**

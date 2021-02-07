@@ -61,9 +61,9 @@ let compile_genfuns f =
 ;;
 
 let assemble_llvm_ir infile outfile =
-  print_endline "calling llc";
   let result =
-    (* We need to run -O3 to reduce the amount of stack space used :) *)
+    (* We need to run -O3 to reduce the amount of stack space used, so the GC
+    printer doesn't die *)
     Ccomp.command
       ("/usr/local/opt/llvm@10/bin/opt -S -O3"
       ^ " -o While.ll"
@@ -166,7 +166,6 @@ let compile_implementation
             ~this_module:impl_module
             ~ctx
             clambda_with_constants;
-          print_endline (Llvm.string_of_llmodule impl_module);
           Emitaux.emit_string (Llvm.string_of_llmodule impl_module)))
 ;;
 

@@ -22,7 +22,7 @@ let%expect_test "" =
        (clos (Value "i8* %clos")))))
     ; ModuleID = 'melse'
     source_filename = "melse"
-    target triple = "x86_64-apple-macosx10.15.0"
+    target triple = "x86_64-apple-darwin19.6.0"
 
     @0 = global { i64, i8* (i8*)*, i64 } { i64 3063, i8* (i8*)* @camlMelse__f_80, i64 3 }
     @camlMelse__40 = global i8* bitcast (i8* (i8*)** getelementptr inbounds ({ i64, i8* (i8*)*, i64 }, { i64, i8* (i8*)*, i64 }* @0, i32 0, i32 1) to i8*)
@@ -104,14 +104,14 @@ let%expect_test "" =
     ; Function Attrs: nounwind
     declare void @llvm.gcroot(i8**, i8*) #0
 
-    define ghccc i8* @camlMelse__f_80(i8* %x) {
+    define ghccc i8* @camlMelse__f_80(i8* %x) gc "ocaml" {
     entry:
       %0 = ptrtoint i8* %x to i64
       %1 = add i64 %0, 20
       ret i64 %1
     }
 
-    define ghccc i8* @camlMelse__entry() {
+    define ghccc i8* @camlMelse__entry() gc "ocaml" {
     entry:
       %0 = alloca i8*
       store i8* bitcast (i8** @camlMelse__40 to i8*), i8** %0
@@ -120,7 +120,7 @@ let%expect_test "" =
       ret i8* inttoptr (i64 1 to i8*)
     }
 
-    define ghccc i64 @caml_program() {
+    define ghccc i64 @caml_program() gc "ocaml" {
     entry:
       call ghccc void bitcast (i8* ()* @camlMelse__entry to void ()*)()
       %0 = load i64, i64* bitcast (i8** @caml_globals_inited to i64*)
@@ -129,7 +129,7 @@ let%expect_test "" =
       ret i64 1
     }
 
-    define ghccc i8* @caml_apply3(i8* %arg, i8* %arg1, i8* %arg2, i8* %clos) {
+    define ghccc i8* @caml_apply3(i8* %arg, i8* %arg1, i8* %arg2, i8* %clos) gc "ocaml" {
     entry:
       %0 = getelementptr i8, i8* %clos, i64 8
       %1 = bitcast i8* %0 to i8**
@@ -176,7 +176,7 @@ let%expect_test "" =
       ret i8* %iftmp
     }
 
-    define ghccc i8* @caml_apply2(i8* %arg, i8* %arg1, i8* %clos) {
+    define ghccc i8* @caml_apply2(i8* %arg, i8* %arg1, i8* %clos) gc "ocaml" {
     entry:
       %0 = getelementptr i8, i8* %clos, i64 8
       %1 = bitcast i8* %0 to i8**
@@ -238,7 +238,7 @@ let%expect_test "" =
        (clos (Value "i8* %clos")))))
     ; ModuleID = 'melse'
     source_filename = "melse"
-    target triple = "x86_64-apple-macosx10.15.0"
+    target triple = "x86_64-apple-darwin19.6.0"
 
     @0 = global { i64, i8* (i8*)*, i64 } { i64 3063, i8* (i8*)* @camlMelse__sum_80, i64 3 }
     @camlMelse__53 = global i8* bitcast (i8* (i8*)** getelementptr inbounds ({ i64, i8* (i8*)*, i64 }, { i64, i8* (i8*)*, i64 }* @0, i32 0, i32 1) to i8*)
@@ -320,7 +320,7 @@ let%expect_test "" =
     ; Function Attrs: nounwind
     declare void @llvm.gcroot(i8**, i8*) #0
 
-    define ghccc i8* @camlMelse__sum_80(i8* %x) {
+    define ghccc i8* @camlMelse__sum_80(i8* %x) gc "ocaml" {
     entry:
       %0 = ptrtoint i8* %x to i64
       %1 = sub i64 %0, 1
@@ -349,7 +349,7 @@ let%expect_test "" =
       ret i64 %iftmp
     }
 
-    define ghccc i8* @camlMelse__entry() {
+    define ghccc i8* @camlMelse__entry() gc "ocaml" {
     entry:
       %0 = alloca i8*
       store i8* bitcast (i8** @camlMelse__53 to i8*), i8** %0
@@ -358,7 +358,7 @@ let%expect_test "" =
       ret i8* inttoptr (i64 1 to i8*)
     }
 
-    define ghccc i64 @caml_program() {
+    define ghccc i64 @caml_program() gc "ocaml" {
     entry:
       call ghccc void bitcast (i8* ()* @camlMelse__entry to void ()*)()
       %0 = load i64, i64* bitcast (i8** @caml_globals_inited to i64*)
@@ -367,7 +367,7 @@ let%expect_test "" =
       ret i64 1
     }
 
-    define ghccc i8* @caml_apply3(i8* %arg, i8* %arg1, i8* %arg2, i8* %clos) {
+    define ghccc i8* @caml_apply3(i8* %arg, i8* %arg1, i8* %arg2, i8* %clos) gc "ocaml" {
     entry:
       %0 = getelementptr i8, i8* %clos, i64 8
       %1 = bitcast i8* %0 to i8**
@@ -414,7 +414,7 @@ let%expect_test "" =
       ret i8* %iftmp
     }
 
-    define ghccc i8* @caml_apply2(i8* %arg, i8* %arg1, i8* %clos) {
+    define ghccc i8* @caml_apply2(i8* %arg, i8* %arg1, i8* %clos) gc "ocaml" {
     entry:
       %0 = getelementptr i8, i8* %clos, i64 8
       %1 = bitcast i8* %0 to i8**
@@ -480,7 +480,7 @@ let create x y z = { x; y; z } |}
        (clos (Value "i8* %clos")))))
     ; ModuleID = 'melse'
     source_filename = "melse"
-    target triple = "x86_64-apple-macosx10.15.0"
+    target triple = "x86_64-apple-darwin19.6.0"
 
     @caml_curry3 = external global i8*
     @0 = global { i64, i8**, i64, i8* (i8*, i8*, i8*)* } { i64 4087, i8** @caml_curry3, i64 7, i8* (i8*, i8*, i8*)* @camlMelse__create_84 }
@@ -563,7 +563,7 @@ let create x y z = { x; y; z } |}
     ; Function Attrs: nounwind
     declare void @llvm.gcroot(i8**, i8*) #0
 
-    define ghccc i8* @camlMelse__create_84(i8* %x, i8* %y, i8* %z) {
+    define ghccc i8* @camlMelse__create_84(i8* %x, i8* %y, i8* %z) gc "ocaml" {
     entry:
       %0 = alloca i8*
       %1 = call i8* @caml_alloc(i64 4, i32 0)
@@ -572,7 +572,7 @@ let create x y z = { x; y; z } |}
       ret i8* %1
     }
 
-    define ghccc i8* @camlMelse__entry() {
+    define ghccc i8* @camlMelse__entry() gc "ocaml" {
     entry:
       %0 = alloca i8*
       store i8* bitcast (i8** @camlMelse__66 to i8*), i8** %0
@@ -581,7 +581,7 @@ let create x y z = { x; y; z } |}
       ret i8* inttoptr (i64 1 to i8*)
     }
 
-    define ghccc i64 @caml_program() {
+    define ghccc i64 @caml_program() gc "ocaml" {
     entry:
       call ghccc void bitcast (i8* ()* @camlMelse__entry to void ()*)()
       %0 = load i64, i64* bitcast (i8** @caml_globals_inited to i64*)
@@ -590,7 +590,7 @@ let create x y z = { x; y; z } |}
       ret i64 1
     }
 
-    define ghccc i8* @caml_apply3(i8* %arg, i8* %arg1, i8* %arg2, i8* %clos) {
+    define ghccc i8* @caml_apply3(i8* %arg, i8* %arg1, i8* %arg2, i8* %clos) gc "ocaml" {
     entry:
       %0 = getelementptr i8, i8* %clos, i64 8
       %1 = bitcast i8* %0 to i8**
@@ -637,7 +637,7 @@ let create x y z = { x; y; z } |}
       ret i8* %iftmp
     }
 
-    define ghccc i8* @caml_apply2(i8* %arg, i8* %arg1, i8* %clos) {
+    define ghccc i8* @caml_apply2(i8* %arg, i8* %arg1, i8* %clos) gc "ocaml" {
     entry:
       %0 = getelementptr i8, i8* %clos, i64 8
       %1 = bitcast i8* %0 to i8**

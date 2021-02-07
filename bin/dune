@@ -7,7 +7,8 @@
 
 (executable
  (name driver)
- (libraries core llambda ocaml-compiler-libs.optcomp ocaml-compiler-libs.common)
+ (libraries core llambda ocaml-compiler-libs.optcomp
+   ocaml-compiler-libs.common)
  (modules driver)
  (preprocess
   (pps ppx_jane)))

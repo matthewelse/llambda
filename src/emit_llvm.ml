@@ -180,7 +180,6 @@ let rec codegen_expr t (expr : Cmm.expression) =
       | None ->
         (match lookup_function name t.this_module with
         | None ->
-          eprint_s [%message "declare_global" (name : string)];
           declare_global
             (Declarations.type_of_machtype_component t.ctx Val)
             name
@@ -432,8 +431,8 @@ and codegen_operation t operation args (_ : Debug_info.t) =
 let rec declare_extfuncs_expression ~ctx ~this_module (expr : Cmm.expression) =
   match expr with
   | Cconst_symbol _ | Cvar _ | Cconst_pointer _ | Cconst_int _ | Cconst_natint _
-  | Cconst_float _ | Cexit _ | Cassign _
-  | Ctuple [] ->
+  | Cconst_float _ | Cexit _ | Cassign _ | Ctuple _ | Cconst_natpointer _ | Cblockheader _
+    ->
     ()
   | Cop (operation, args, _) ->
     declare_extfuncs_operation ~ctx ~this_module operation args
@@ -453,7 +452,15 @@ let rec declare_extfuncs_expression ~ctx ~this_module (expr : Cmm.expression) =
   | Ccatch (_, [ (_, [], handler, _) ], body) ->
     declare_extfuncs_expression ~ctx ~this_module handler;
     declare_extfuncs_expression ~ctx ~this_module body
-  | _ -> assert false
+  | Cphantom_let _ -> failwith "phantom let"
+  | Ccatch _ -> failwith "ccatch"
+  | Cswitch (expr, _, exprs, _) ->
+    declare_extfuncs_expression ~ctx ~this_module expr;
+    Array.iter exprs ~f:(fun (expr, _) ->
+        declare_extfuncs_expression ~ctx ~this_module expr)
+  | Ctrywith (try_, _, handler, _) ->
+    declare_extfuncs_expression ~ctx ~this_module try_;
+    declare_extfuncs_expression ~ctx ~this_module handler
 
 and declare_extfuncs_operation
     ~ctx
@@ -506,9 +513,7 @@ let value_of_data_item this_module ctx (data_item : Cmm.data_item) =
          (lookup_function name this_module)
      with
     | Some value -> Some value
-    | None ->
-      eprint_s [%message "declare_global (in data item)" (name : string)];
-      Some (declare_global (Declarations.void_pointer_type ctx) name this_module))
+    | None -> Some (declare_global (Declarations.void_pointer_type ctx) name this_module))
   | Cskip _ | Calign _ -> None
 ;;
 
