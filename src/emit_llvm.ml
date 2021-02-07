@@ -55,9 +55,7 @@ let type_of_expression ctx env expression =
     | Ccmpi _ -> Cmm.typ_int, i1_type ctx
     | Caddv -> Cmm.typ_val, Declarations.type_of_machtype ctx Cmm.typ_val
     | Cadda -> Cmm.typ_addr, Declarations.type_of_machtype ctx Cmm.typ_addr
-    | Ccmpa _ ->
-      (* TODO: this can be a boolean *)
-      Cmm.typ_int, i1_type ctx
+    | Ccmpa _ -> Cmm.typ_int, i1_type ctx
     | Cnegf | Cabsf | Caddf | Csubf | Cmulf | Cdivf ->
       List.map args ~f:(machtype_of_expression env)
       |> List.reduce_exn ~f:(fun (machtype1, lltype1) (machtype2, lltype2) ->
@@ -84,9 +82,11 @@ let type_of_expression ctx env expression =
     | Clet (name, value, body) | Clet_mut (name, _, value, body) ->
       let name = Backend_var.With_provenance.name name in
       let type_value = machtype_of_expression env value in
-      String.Table.add_exn env ~key:name ~data:type_value;
+      let prev = String.Table.find env name in
+      String.Table.set env ~key:name ~data:type_value;
       let body_type = machtype_of_expression env body in
       String.Table.remove env name;
+      Option.iter prev ~f:(fun prev -> String.Table.set env ~key:name ~data:prev);
       body_type
     | Cvar name -> String.Table.find_exn env (Backend_var.name name)
     | Cconst_int _ -> Cmm.typ_int, Declarations.type_of_machtype ctx Cmm.typ_int
@@ -134,7 +134,6 @@ type t =
 [@@deriving sexp_of]
 
 let rec codegen_expr t (expr : Cmm.expression) =
-  eprint_s [%message "codegen_expr" (expr : Cmm.expression)];
   match expr with
   | Cconst_int (value, _) -> const_int (i64_type t.ctx) value
   | Cconst_natint (value, _) -> const_int (i64_type t.ctx) (Nativeint.to_int_exn value)
@@ -157,20 +156,25 @@ let rec codegen_expr t (expr : Cmm.expression) =
     let ptr = build_alloca (type_of value) "" t.builder in
     let (_ : llvalue) = build_store value ptr t.builder in
     let name = Backend_var.With_provenance.name var in
-    String.Table.add_exn t.env ~key:name ~data:(`Immutable ptr);
+    let previous = String.Table.find t.env name in
+    String.Table.set t.env ~key:name ~data:(`Immutable ptr);
     let body = codegen_expr t body in
     String.Table.remove t.env name;
+    Option.iter previous ~f:(fun prev -> String.Table.set t.env ~key:name ~data:prev);
     body
   | Clet_mut (var, machtype, value, body) ->
     let ptr = build_alloca (Declarations.type_of_machtype t.ctx machtype) "" t.builder in
     let value = codegen_expr t value in
     let (_ : llvalue) = build_store value ptr t.builder in
-    String.Table.add_exn
+    let name = Backend_var.With_provenance.name var in
+    let previous = String.Table.find t.env name in
+    String.Table.set
       t.env
-      ~key:(Backend_var.With_provenance.name var)
+      ~key:name
       ~data:(`Mutable ptr);
     let body = codegen_expr t body in
-    String.Table.remove t.env (Backend_var.With_provenance.name var);
+    String.Table.remove t.env name;
+    Option.iter previous ~f:(fun prev -> String.Table.set t.env ~key:name ~data:prev);
     body
   | Cconst_symbol (name, _) ->
     let ptr =
@@ -189,17 +193,11 @@ let rec codegen_expr t (expr : Cmm.expression) =
           assert false
         | Some fn -> fn)
     in
-    eprint_s [%message "Reading const symbol" (name : string) (ptr : Ir_value.t)];
-    (* yuk this has been segfaulting :( *)
-    let result =
       build_pointercast
         ptr
         (Declarations.type_of_machtype_component t.ctx Addr)
         "const_symbol"
         t.builder
-    in
-    eprint_s [%message "did we get here?"];
-    result
   | Cifthenelse (cond, _, then_, _, else_, _) ->
     let start_bb = insertion_block t.builder in
     let cond = codegen_expr t cond in
@@ -424,10 +422,7 @@ and codegen_operation t operation args (_ : Debug_info.t) =
         t.builder
     in
     ptr
-  | Cextcall (name, return_type, does_alloc, label), args ->
-    eprint_s
-      [%message
-        "wtf does label mean" (name : string) (label : int option) (does_alloc : bool)];
+  | Cextcall (name, return_type, _does_alloc, _label), args ->
     let arg_types = List.map args ~f:(fun _ -> Declarations.value_type t.ctx) in
     let function_type =
       function_type
@@ -504,7 +499,6 @@ let emit (cmm : Cmm.phrase list) =
           | Cfunction cfundecl ->
             (* It seems kind of strange that we don't always return a value here... *)
             let function_type = type_of_function ctx cfundecl in
-            eprint_s [%message "declaring function" (cfundecl.fun_name : string)];
             Ir_module.declare_function'
               this_module
               ~name:cfundecl.fun_name
@@ -595,7 +589,6 @@ let emit (cmm : Cmm.phrase list) =
                    { ctx; builder; env; this_module; fundecl; catches }
                    cfundecl.fun_body
                in
-               eprint_s [%message "finished codegen_expr" (cfundecl.fun_name : string)];
                build_ret ret_val builder |> (ignore : llvalue -> unit)
              with
             | exn ->
