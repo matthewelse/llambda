@@ -134,6 +134,7 @@ type t =
 [@@deriving sexp_of]
 
 let rec codegen_expr t (expr : Cmm.expression) =
+  eprint_s [%message "codegen_expr" (expr : Cmm.expression)];
   match expr with
   | Cconst_int (value, _) -> const_int (i64_type t.ctx) value
   | Cconst_natint (value, _) -> const_int (i64_type t.ctx) (Nativeint.to_int_exn value)
@@ -172,19 +173,33 @@ let rec codegen_expr t (expr : Cmm.expression) =
     String.Table.remove t.env (Backend_var.With_provenance.name var);
     body
   | Cconst_symbol (name, _) ->
-    (match lookup_global name t.this_module with
-    | Some global -> global
-    | None ->
-      (match lookup_function name t.this_module with
+    let ptr =
+      match lookup_global name t.this_module with
+      | Some global -> global
       | None ->
-        eprint_s
-          [%message
-            "unable to find symbol"
-              (name : string)
-              ~env:
-                (t.env : [ `Immutable of _ | `Mutable of _ | `Value of _ ] String.Table.t)];
-        assert false
-      | Some fn -> fn))
+        (match lookup_function name t.this_module with
+        | None ->
+          eprint_s
+            [%message
+              "unable to find symbol"
+                (name : string)
+                ~env:
+                  (t.env
+                    : [ `Immutable of _ | `Mutable of _ | `Value of _ ] String.Table.t)];
+          assert false
+        | Some fn -> fn)
+    in
+    eprint_s [%message "Reading const symbol" (name : string) (ptr : Ir_value.t)];
+    (* yuk this has been segfaulting :( *)
+    let result =
+      build_pointercast
+        ptr
+        (Declarations.type_of_machtype_component t.ctx Addr)
+        "const_symbol"
+        t.builder
+    in
+    eprint_s [%message "did we get here?"];
+    result
   | Cifthenelse (cond, _, then_, _, else_, _) ->
     let start_bb = insertion_block t.builder in
     let cond = codegen_expr t cond in
@@ -280,23 +295,15 @@ let rec codegen_expr t (expr : Cmm.expression) =
 and codegen_operation t operation args (_ : Debug_info.t) =
   match operation, args with
   | Capply return_type, func :: args ->
-    let types =
-      Option.map return_type ~f:(function
-          | Val -> [%sexp Val]
-          | Addr -> [%sexp Addr]
-          | Int -> [%sexp Int]
-          | Float -> [%sexp Float])
-    in
     let func = codegen_expr t func in
-    let func_type = type_of func |> element_type in
-    let typs = param_types func_type |> Array.to_list in
-    eprint_s
-      [%message "function call" (types : Sexp.t option) (string_of_lltype func_type)];
-    let args =
-      List.map2_exn args typs ~f:(fun arg typ ->
-          let arg = codegen_expr t arg in
-          to_pointer_if_integer ~builder:t.builder ~typ arg)
+    let args = List.map args ~f:(codegen_expr t) in
+    let new_func_type =
+      function_type
+        (Declarations.type_of_machtype t.ctx return_type)
+        (List.map args ~f:type_of |> List.to_array)
+      |> pointer_type
     in
+    let func = build_pointercast func new_func_type "func_cast" t.builder in
     let call = build_call func (List.to_array args) "" t.builder in
     set_instruction_call_conv Declarations.ghc_calling_convention call;
     call
@@ -342,7 +349,7 @@ and codegen_operation t operation args (_ : Debug_info.t) =
     let left = codegen_expr t left in
     let right = codegen_expr t right in
     build_ashr left right "" t.builder
-  | Cstore (memory_chunk, _), [ value; dst ] ->
+  | Cstore (memory_chunk, _), [ dst; value ] ->
     let dst = codegen_expr t dst in
     let mem_type = Declarations.type_of_memory_chunk t.ctx memory_chunk in
     let ptr_type = pointer_type mem_type in
@@ -359,7 +366,7 @@ and codegen_operation t operation args (_ : Debug_info.t) =
     (match memory_chunk with
     | Byte_unsigned | Byte_signed | Sixteen_unsigned | Sixteen_signed | Thirtytwo_unsigned
     | Thirtytwo_signed ->
-      build_sext raw (i64_type t.ctx) "" t.builder
+      build_zext raw (i64_type t.ctx) "" t.builder
     | Word_int | Word_val -> raw
     | Single | Double | Double_u -> raw)
   | Cload _, _ -> failwith "load has too many arguments."
@@ -587,6 +594,7 @@ let emit (cmm : Cmm.phrase list) =
                    { ctx; builder; env; this_module; fundecl; catches }
                    cfundecl.fun_body
                in
+               eprint_s [%message "finished codegen_expr" (cfundecl.fun_name : string)];
                build_ret ret_val builder |> (ignore : llvalue -> unit)
              with
             | exn ->

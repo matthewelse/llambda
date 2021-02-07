@@ -1,6 +1,11 @@
 (library
  (name llambda)
- (libraries compiler_wrappers core ocaml-compiler-libs.optcomp
-   ocaml-compiler-libs.common ocaml-compiler-libs.shadow wrap_llvm llvm)
+ (libraries
+  core
+  ocaml-compiler-libs.optcomp
+  ocaml-compiler-libs.common
+  ocaml-compiler-libs.shadow
+  wrap_llvm
+  llvm)
  (preprocess
   (pps ppx_jane)))
