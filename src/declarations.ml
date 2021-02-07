@@ -13,8 +13,12 @@ let type_of_machtype_component ctx (component : Cmm.machtype_component) =
 
 let type_of_machtype ctx (machtype : Cmm.machtype) =
   match machtype with
-  | None -> void_type ctx
-  | Some component -> type_of_machtype_component ctx component
+  | [||] -> void_type ctx
+  | [| component |] -> type_of_machtype_component ctx component
+  | _ ->
+    raise_s
+      [%message
+        "Tried to get type of machtype with multiple elements. This is not supported."]
 ;;
 
 let type_of_operation ctx (op : Cmm.operation) =

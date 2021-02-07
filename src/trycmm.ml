@@ -1,8 +1,6 @@
 open! Core
 open! Import
 module Compilenv = Ocaml_optcomp.Compilenv
-module Cmm = Compiler_wrappers.Wrap_cmm
-module Cmmgen = Compiler_wrappers.Wrap_cmmgen
 module Closure_middle_end = Ocaml_optcomp.Closure_middle_end
 module Pprintast = Ocaml_common.Pprintast
 module Printclambda = Ocaml_optcomp.Printclambda

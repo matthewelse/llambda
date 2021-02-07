@@ -17,15 +17,15 @@ let type_of_memory_chunk ctx (chunk : Cmm.memory_chunk) =
 let type_of_expression ctx env expression =
   let unify (machtypel, lltypel) (machtyper, lltyper) =
     match machtypel, machtyper with
-    | None, None -> machtypel, lltypel
-    | Some Cmm.Int, Some Cmm.Int ->
+    | [||], [||] -> machtypel, lltypel
+    | [| Cmm.Int |], [| Cmm.Int |] ->
       (* Let's assume that we sign-extend things or something. *)
       let larger_bitwidth =
         Int.max (integer_bitwidth lltypel) (integer_bitwidth lltyper)
       in
       machtypel, integer_type ctx larger_bitwidth
-    | Some l, Some r ->
-      let machtype = Some (Cmm.lub_component l r) in
+    | [| l |], [| r |] ->
+      let machtype = [| Cmm.lub_component l r |] in
       machtype, Declarations.type_of_machtype ctx machtype
     | _ -> assert false
   in
@@ -35,21 +35,21 @@ let type_of_expression ctx env expression =
     | Cextcall (_, result, _, _) -> result, Declarations.type_of_machtype ctx result
     | Cload (memory_chunk, _) -> type_of_memory_chunk ctx memory_chunk
     | Calloc -> Cmm.typ_val, Declarations.type_of_machtype ctx Cmm.typ_val
-    | Cstore _ -> None, Declarations.type_of_machtype ctx None
+    | Cstore _ -> [||], Declarations.type_of_machtype ctx [||]
     | Caddi | Csubi | Cmuli | Cmulhi | Cdivi | Cmodi | Cand | Cor | Cxor | Clsl | Clsr
     | Casr ->
       List.map args ~f:(machtype_of_expression env)
       |> List.reduce_exn ~f:(fun (machtype1, lltype1) (machtype2, lltype2) ->
              match machtype1, machtype2 with
-             | Some Cmm.Float, _ | _, Some Float | None, None -> assert false
-             | Some Int, Some Int ->
+             | [| Cmm.Float |], _ | _, [| Float |] | [||], [||] -> assert false
+             | [| Int |], [| Int |] ->
                (* Let's assume that we sign-extend things or something. *)
                let larger_bitwidth =
                  Int.max (integer_bitwidth lltype1) (integer_bitwidth lltype2)
                in
                machtype1, integer_type ctx larger_bitwidth
-             | Some l, Some r ->
-               let machtype = Some (Cmm.lub_component l r) in
+             | [| l |], [| r |] ->
+               let machtype = [| Cmm.lub_component l r |] in
                machtype, Declarations.type_of_machtype ctx machtype
              | _ -> assert false)
     | Ccmpi _ -> Cmm.typ_int, i1_type ctx
@@ -62,7 +62,7 @@ let type_of_expression ctx env expression =
       List.map args ~f:(machtype_of_expression env)
       |> List.reduce_exn ~f:(fun (machtype1, lltype1) (machtype2, lltype2) ->
              match machtype1, machtype2 with
-             | Some Cmm.Float, _ | _, Some Float ->
+             | [| Cmm.Float |], _ | _, [| Float |] ->
                if phys_equal lltype1 lltype2
                then machtype1, lltype1
                else
@@ -495,6 +495,7 @@ let rec structify ~ctx ~this_module (items : Cmm.data_item list) =
 let emit (cmm : Cmm.phrase list) =
   let ctx = Ir_context.global () in
   Ir_module.with_module ~ctx "melse" (fun this_module ->
+      set_target_triple "x86_64-apple-macosx10.15.0" this_module;
       let builder = Ir_builder.create ctx in
       List.iter (Declarations.builtin_functions ctx) ~f:(fun (name, funtype) ->
           Ir_module.declare_function' this_module ~name ~funtype);
@@ -531,7 +532,7 @@ let emit (cmm : Cmm.phrase list) =
                 let ptr =
                   build_pointercast
                     ptr
-                    (Declarations.type_of_machtype ctx (Some Addr))
+                    (Declarations.type_of_machtype ctx [| Addr |])
                     ""
                     builder
                 in
@@ -541,7 +542,7 @@ let emit (cmm : Cmm.phrase list) =
                 let ptr =
                   build_pointercast
                     ptr
-                    (Declarations.type_of_machtype ctx (Some Addr))
+                    (Declarations.type_of_machtype ctx [| Addr |])
                     ""
                     builder
                 in
