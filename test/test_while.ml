@@ -2,6 +2,7 @@
 open! Core
 
 module Trycmm = Llambda.Trycmm
+
 let emit = Llambda.Emit_llvm.emit
 
 let%expect_test "while example" =
@@ -20,7 +21,8 @@ let%expect_test "while example" =
   [%expect {| |}];
   emit cmm;
   ();
-  [%expect {|
+  [%expect
+    {|
     ("declaring function" (cfundecl.fun_name camlMelse__f_80))
     ("declaring function" (cfundecl.fun_name camlMelse__entry))
     ; ModuleID = 'melse'
