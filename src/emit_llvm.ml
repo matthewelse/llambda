@@ -168,10 +168,7 @@ let rec codegen_expr t (expr : Cmm.expression) =
     let (_ : llvalue) = build_store value ptr t.builder in
     let name = Backend_var.With_provenance.name var in
     let previous = String.Table.find t.env name in
-    String.Table.set
-      t.env
-      ~key:name
-      ~data:(`Mutable ptr);
+    String.Table.set t.env ~key:name ~data:(`Mutable ptr);
     let body = codegen_expr t body in
     String.Table.remove t.env name;
     Option.iter previous ~f:(fun prev -> String.Table.set t.env ~key:name ~data:prev);
@@ -183,21 +180,17 @@ let rec codegen_expr t (expr : Cmm.expression) =
       | None ->
         (match lookup_function name t.this_module with
         | None ->
-          eprint_s
-            [%message
-              "unable to find symbol"
-                (name : string)
-                ~env:
-                  (t.env
-                    : [ `Immutable of _ | `Mutable of _ | `Value of _ ] String.Table.t)];
-          assert false
+          declare_global
+            (Declarations.type_of_machtype_component t.ctx Val)
+            name
+            t.this_module
         | Some fn -> fn)
     in
-      build_pointercast
-        ptr
-        (Declarations.type_of_machtype_component t.ctx Addr)
-        "const_symbol"
-        t.builder
+    build_pointercast
+      ptr
+      (Declarations.type_of_machtype_component t.ctx Addr)
+      "const_symbol"
+      t.builder
   | Cifthenelse (cond, _, then_, _, else_, _) ->
     let start_bb = insertion_block t.builder in
     let cond = codegen_expr t cond in
@@ -443,7 +436,7 @@ and codegen_operation t operation args (_ : Debug_info.t) =
 let type_of_function ctx (fundecl : Cmm.fundecl) =
   let env = String.Table.create () in
   List.iter fundecl.fun_args ~f:(fun (name, machtype) ->
-      String.Table.add_exn
+      String.Table.set
         env
         ~key:(Backend_var.With_provenance.name name)
         ~data:(machtype, Declarations.type_of_machtype ctx machtype));
@@ -576,8 +569,13 @@ let emit (cmm : Cmm.phrase list) =
                 ~f:(fun arg (name, _) ->
                   let real_name = Backend_var.With_provenance.name name in
                   set_value_name real_name arg;
-                  real_name, `Value arg)
+                  value_name arg, `Value arg)
             in
+            eprint_s
+              [%message
+                "function args"
+                  ~name:cfundecl.fun_name
+                  (args : (string * [ `Value of Ir_value.t ]) list)];
             let env = String.Table.of_alist_exn args in
             let catches = Int.Table.create () in
             String.Table.add_exn env ~key:cfundecl.fun_name ~data:(`Value fundecl);

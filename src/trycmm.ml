@@ -37,9 +37,49 @@ module Frontend = struct
     structure
   ;;
 
+  module Longident = struct
+    include Ocaml_common.Longident
+
+    let sexp_of_t t = flatten t |> [%sexp_of: string list]
+  end
+
+  type nonrec lookup_error = Ocaml_common.Env.lookup_error =
+    | Unbound_value of Longident.t * (Ocaml_common.Env.unbound_value_hint[@sexp.opaque])
+    | Unbound_type of Longident.t
+    | Unbound_constructor of Longident.t
+    | Unbound_label of Longident.t
+    | Unbound_module of Longident.t
+    | Unbound_class of Longident.t
+    | Unbound_modtype of Longident.t
+    | Unbound_cltype of Longident.t
+    | Unbound_instance_variable of string
+    | Not_an_instance_variable of string
+    | Masked_instance_variable of Longident.t
+    | Masked_self_variable of Longident.t
+    | Masked_ancestor_variable of Longident.t
+    | Structure_used_as_functor of Longident.t
+    | Abstract_used_as_functor of Longident.t
+    | Functor_used_as_structure of Longident.t
+    | Abstract_used_as_structure of Longident.t
+    | Generative_used_as_applicative of Longident.t
+    | Illegal_reference_to_recursive_module
+    | Cannot_scrape_alias of Longident.t * (Ocaml_common.Path.t[@sexp.opaque])
+  [@@deriving sexp_of]
+
   let type_impl t structure =
+    Compmisc.init_path ();
     Env.set_unit_name (module_name t);
-    let env = Compmisc.initial_env () in
+    let env =
+      try Compmisc.initial_env () with
+      | Ocaml_common.Env.Error error ->
+        let error =
+          match error with
+          | Missing_module _ -> [%sexp Missing_module]
+          | Illegal_value_name _ -> [%sexp Illegal_value_name]
+          | Lookup_error (_, _, err) -> [%sexp Lookup_error (err : lookup_error)]
+        in
+        raise_s [%message "Error during Compmisc.initial_env" (error : Sexp.t)]
+    in
     let typed =
       try
         Ocaml_common.Typemod.type_implementation
@@ -81,6 +121,32 @@ module Backend = struct
 
   let module_name t = String.capitalize t.prefix_name
   let filename t = t.prefix_name ^ ".ml"
+
+  let make_startup_file units =
+    let module Cmm_helpers = Ocaml_optcomp.Cmm_helpers in
+    Ocaml_common.Location.input_name := "caml_startup";
+    (* set name of "current" input *)
+    Compilenv.reset "_startup";
+    (* set the name of the "current" compunit *)
+    let name_list = [ "Melse" ] in
+    let cmm = [ Ocaml_optcomp.Cmm_helpers.entry_point name_list ] in
+    let cmm = cmm @ Ocaml_optcomp.Cmm_helpers.generic_functions false units in
+    let cmm =
+      cmm
+      @ (Array.mapi
+           ~f:(fun i name -> Cmm_helpers.predef_exception i name)
+           Ocaml_common.Runtimedef.builtin_exceptions
+        |> Array.to_list)
+    in
+    let cmm = cmm @ [ Ocaml_optcomp.Cmm_helpers.global_table name_list ] in
+    (* let globals_map = make_globals_map units_list ~crc_interfaces:[] in *)
+    (* let cmm = Cmm_helpers.globals_map globals_map :: cmm in *)
+    let cmm = cmm @ [ Cmm_helpers.data_segment_table ("_startup" :: name_list) ] in
+    let cmm = cmm @ [ Cmm_helpers.code_segment_table ("_startup" :: name_list) ] in
+    let all_names = "_startup" :: "_system" :: name_list in
+    let cmm = cmm @ [ Cmm_helpers.frame_table all_names ] in
+    cmm
+  ;;
 
   let to_cmm t (typed, coercion) =
     let lambda =
@@ -131,15 +197,16 @@ module Backend = struct
                 (field_count : int)]));
     let cmm = Ocaml_optcomp.Cmmgen.compunit clambda in
     (* Generate generic functions: curry/apply/tuplify etc *)
-    let cmm' = Ocaml_optcomp.Cmm_helpers.generic_functions true [Compilenv.current_unit_infos ()] in
-    (* if t.dump_cmm then List.iter cmm ~f:(Printcmm.phrase Format.std_formatter); *)
-    cmm @ cmm'
+    let cmm' = make_startup_file [ Compilenv.current_unit_infos () ] in
+    let cmm = cmm @ cmm' in
+    if t.dump_cmm
+    then List.iter cmm ~f:(Ocaml_optcomp.Printcmm.phrase Format.std_formatter);
+    cmm
   ;;
 end
 
 let cmm_of_source ~dump_cmm source =
   Compilenv.reset "Melse";
-  Compmisc.init_path ();
   let config : Frontend.t =
     { source_prefix = "melse"; dump_ast = false; dump_typed_ast = false }
   in
