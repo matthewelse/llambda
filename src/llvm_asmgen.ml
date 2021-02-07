@@ -62,14 +62,24 @@ let compile_genfuns f =
 
 let assemble_llvm_ir infile outfile =
   print_endline "calling llc";
-  Ccomp.command
-    ("/usr/local/opt/llvm@10/bin/clang -c"
-    ^ " "
-    ^ String.concat " " (Misc.debug_prefix_map_flags ())
-    ^ " -o "
-    ^ Filename.quote outfile
-    ^ " "
-    ^ Filename.quote infile)
+  let result =
+    (* We need to run -O3 to reduce the amount of stack space used :) *)
+    Ccomp.command
+      ("/usr/local/opt/llvm@10/bin/opt -S -O3"
+      ^ " -o While.ll"
+      ^ " "
+      ^ Filename.quote infile)
+  in
+  if result = 0
+  then
+    Ccomp.command
+      ("/usr/local/opt/llvm@10/bin/llc -filetype obj"
+      ^ " "
+      ^ String.concat " " (Misc.debug_prefix_map_flags ())
+      ^ " -o "
+      ^ Filename.quote outfile
+      ^ " While.ll" (* urgh LLVM uses the filename as the module name :( *))
+  else result
 ;;
 
 let compile_unit asm_filename keep_asm obj_filename gen =
@@ -144,7 +154,7 @@ let compile_implementation
   Wrap_llvm.Ir_module.with_module
     ~target_triple:"x86_64-apple-macosx10.15.0"
     ~ctx
-    prefixname
+    (Ident.name program.module_ident)
     (fun impl_module ->
       compile_unit asmfile !keep_asm_file (prefixname ^ ext_obj) (fun () ->
           Ident.Set.iter Compilenv.require_global program.required_globals;
@@ -156,6 +166,7 @@ let compile_implementation
             ~this_module:impl_module
             ~ctx
             clambda_with_constants;
+          print_endline (Llvm.string_of_llmodule impl_module);
           Emitaux.emit_string (Llvm.string_of_llmodule impl_module)))
 ;;
 

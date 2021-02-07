@@ -180,6 +180,7 @@ let rec codegen_expr t (expr : Cmm.expression) =
       | None ->
         (match lookup_function name t.this_module with
         | None ->
+          eprint_s [%message "declare_global" (name : string)];
           declare_global
             (Declarations.type_of_machtype_component t.ctx Val)
             name
@@ -415,14 +416,9 @@ and codegen_operation t operation args (_ : Debug_info.t) =
         t.builder
     in
     ptr
-  | Cextcall (name, return_type, _does_alloc, _label), args ->
+  | Cextcall (name, _, _does_alloc, _label), args ->
     let arg_types = List.map args ~f:(fun _ -> Declarations.value_type t.ctx) in
-    let function_type =
-      function_type
-        (Declarations.type_of_machtype t.ctx return_type)
-        (Array.of_list arg_types)
-    in
-    let func = Ir_module.declare_function t.this_module ~name ~funtype:function_type in
+    let func = Ir_module.lookup_function_exn t.this_module ~name in
     build_call
       func
       (Array.of_list
@@ -431,6 +427,50 @@ and codegen_operation t operation args (_ : Debug_info.t) =
       ""
       t.builder
   | _ -> raise_s [%message "I don't know how to compile this operator."]
+;;
+
+let rec declare_extfuncs_expression ~ctx ~this_module (expr : Cmm.expression) =
+  match expr with
+  | Cconst_symbol _ | Cvar _ | Cconst_pointer _ | Cconst_int _ | Cconst_natint _
+  | Cconst_float _ | Cexit _ | Cassign _
+  | Ctuple [] ->
+    ()
+  | Cop (operation, args, _) ->
+    declare_extfuncs_operation ~ctx ~this_module operation args
+  | Csequence (before, after) ->
+    declare_extfuncs_expression ~ctx ~this_module before;
+    declare_extfuncs_expression ~ctx ~this_module after
+  | Clet (_, value, body) ->
+    declare_extfuncs_expression ~ctx ~this_module value;
+    declare_extfuncs_expression ~ctx ~this_module body
+  | Clet_mut (_, _, value, body) ->
+    declare_extfuncs_expression ~ctx ~this_module value;
+    declare_extfuncs_expression ~ctx ~this_module body
+  | Cifthenelse (cond, _, then_, _, else_, _) ->
+    declare_extfuncs_expression ~ctx ~this_module cond;
+    declare_extfuncs_expression ~ctx ~this_module then_;
+    declare_extfuncs_expression ~ctx ~this_module else_
+  | Ccatch (_, [ (_, [], handler, _) ], body) ->
+    declare_extfuncs_expression ~ctx ~this_module handler;
+    declare_extfuncs_expression ~ctx ~this_module body
+  | _ -> assert false
+
+and declare_extfuncs_operation
+    ~ctx
+    ~this_module
+    (operation : Cmm.operation)
+    (args : Cmm.expression list)
+  =
+  match operation, args with
+  | Cextcall (name, return_type, _does_alloc, _label), args ->
+    let arg_types = List.map args ~f:(fun _ -> Declarations.value_type ctx) in
+    let function_type =
+      function_type
+        (Declarations.type_of_machtype ctx return_type)
+        (Array.of_list arg_types)
+    in
+    Ir_module.declare_function' this_module ~name ~funtype:function_type
+  | _, args -> List.iter args ~f:(declare_extfuncs_expression ~ctx ~this_module)
 ;;
 
 let type_of_function ctx (fundecl : Cmm.fundecl) =
@@ -466,7 +506,9 @@ let value_of_data_item this_module ctx (data_item : Cmm.data_item) =
          (lookup_function name this_module)
      with
     | Some value -> Some value
-    | None -> Some (declare_global (Declarations.void_pointer_type ctx) name this_module))
+    | None ->
+      eprint_s [%message "declare_global (in data item)" (name : string)];
+      Some (declare_global (Declarations.void_pointer_type ctx) name this_module))
   | Cskip _ | Calign _ -> None
 ;;
 
@@ -488,11 +530,12 @@ let emit ~ctx ~this_module (cmm : Cmm.phrase list) =
   List.iter cmm ~f:(function
       | Cfunction cfundecl ->
         (* It seems kind of strange that we don't always return a value here... *)
-        let function_type = type_of_function ctx cfundecl in
         Ir_module.declare_function'
           this_module
           ~name:cfundecl.fun_name
-          ~funtype:function_type
+          ~funtype:(type_of_function ctx cfundecl);
+        declare_extfuncs_expression ~ctx ~this_module cfundecl.fun_body;
+        ()
       | Cdata _ -> ());
   List.iter cmm ~f:(function
       | Cfunction _ -> ()
@@ -555,7 +598,7 @@ let emit ~ctx ~this_module (cmm : Cmm.phrase list) =
       | Cfunction cfundecl ->
         let fundecl = Ir_module.lookup_function_exn this_module ~name:cfundecl.fun_name in
         set_function_call_conv Declarations.ghc_calling_convention fundecl;
-        (* set_gc (Some "ocaml") fundecl; *)
+        set_gc (Some "ocaml") fundecl;
         (* set argument names *)
         let args =
           List.map2_exn
