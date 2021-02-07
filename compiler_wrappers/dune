@@ -1,6 +1,0 @@
-(library
- (name compiler_wrappers)
- (libraries core ocaml-compiler-libs.common ocaml-compiler-libs.optcomp
-   ocaml-compiler-libs.shadow)
- (preprocess
-  (pps ppx_jane)))
