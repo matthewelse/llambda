@@ -27,6 +27,7 @@ let%expect_test "while example" =
     source_filename = "melse"
     target triple = "x86_64-apple-darwin19.6.0"
 
+    @caml_c_call = external global i8*
     @0 = global { i64, i64 (i8*)*, i64 } { i64 3063, i64 (i8*)* @camlMelse__f_80, i64 3 }
     @camlMelse__27 = global i8* bitcast (i64 (i8*)** getelementptr inbounds ({ i64, i64 (i8*)*, i64 }, { i64, i64 (i8*)*, i64 }* @0, i32 0, i32 1) to i8*)
     @1 = global { i64, i64 } { i64 1792, i64 1 }
@@ -119,17 +120,18 @@ let%expect_test "while example" =
     exit.1:                                           ; preds = %handler.1
       %phi.1 = phi i64 [ 1, %handler.1 ]
       %1 = load i64, i64* %0
-      ret i64 %1
+      %2 = inttoptr i64 %1 to i8*
+      ret i8* %2
 
     handler.2:                                        ; preds = %entry, %merge
-      %2 = load i64, i64* %0
-      %3 = icmp sgt i64 21, %2
-      br i1 %3, label %then, label %else
+      %3 = load i64, i64* %0
+      %4 = icmp sgt i64 21, %3
+      br i1 %4, label %then, label %else
 
     then:                                             ; preds = %handler.2
-      %4 = load i64, i64* %0
-      %5 = add i64 %4, 2
-      store i64 %5, i64* %0
+      %5 = load i64, i64* %0
+      %6 = add i64 %5, 2
+      store i64 %6, i64* %0
       br label %merge
 
     else:                                             ; preds = %handler.2
@@ -142,10 +144,13 @@ let%expect_test "while example" =
 
     define ocamlcc i8* @camlMelse__entry() gc "ocaml" {
     entry:
+      %real_ptr = load i8*, i8** @camlMelse__27
       %0 = alloca i8*
-      store i8* bitcast (i8** @camlMelse__27 to i8*), i8** %0
-      %1 = load i8*, i8** %0
-      store i8* %1, i8** @camlMelse
+      store i8* %real_ptr, i8** %0
+      %real_ptr1 = load i8*, i8** @camlMelse
+      %1 = bitcast i8* %real_ptr1 to i8**
+      %2 = load i8*, i8** %0
+      store i8* %2, i8** %1
       ret i8* inttoptr (i64 1 to i8*)
     }
 
@@ -155,7 +160,7 @@ let%expect_test "while example" =
       %0 = load i64, i64* bitcast (i8** @caml_globals_inited to i64*)
       %1 = add i64 %0, 1
       store i64 %1, i64* bitcast (i8** @caml_globals_inited to i64*)
-      ret i64 1
+      ret i8* inttoptr (i64 1 to i8*)
     }
 
     define ocamlcc i8* @caml_apply3(i8* %arg, i8* %arg1, i8* %arg2, i8* %clos) gc "ocaml" {
