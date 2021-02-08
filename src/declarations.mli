@@ -1,8 +1,7 @@
 open! Core
 open! Import
 
-(** For the time being, we'll use GHC's calling convention. *)
-val ghc_calling_convention : int
+val ocaml_calling_convention : int
 
 (** We treat OCaml values as void pointers, or in LLVM: i8*. *)
 val value_type : Ir_context.t -> Ir_type.t

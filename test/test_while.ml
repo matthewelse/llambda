@@ -107,7 +107,7 @@ let%expect_test "while example" =
     ; Function Attrs: nounwind
     declare void @llvm.gcroot(i8**, i8*) #0
 
-    define ghccc i64 @camlMelse__f_80(i8* %n) gc "ocaml" {
+    define ocamlcc i64 @camlMelse__f_80(i8* %n) gc "ocaml" {
     entry:
       %0 = alloca i64
       store i64 1, i64* %0
@@ -140,7 +140,7 @@ let%expect_test "while example" =
       br label %handler.2
     }
 
-    define ghccc i8* @camlMelse__entry() gc "ocaml" {
+    define ocamlcc i8* @camlMelse__entry() gc "ocaml" {
     entry:
       %0 = alloca i8*
       store i8* bitcast (i8** @camlMelse__27 to i8*), i8** %0
@@ -149,16 +149,16 @@ let%expect_test "while example" =
       ret i8* inttoptr (i64 1 to i8*)
     }
 
-    define ghccc i64 @caml_program() gc "ocaml" {
+    define ocamlcc i64 @caml_program() gc "ocaml" {
     entry:
-      call ghccc void bitcast (i8* ()* @camlMelse__entry to void ()*)()
+      call ocamlcc void bitcast (i8* ()* @camlMelse__entry to void ()*)()
       %0 = load i64, i64* bitcast (i8** @caml_globals_inited to i64*)
       %1 = add i64 %0, 1
       store i64 %1, i64* bitcast (i8** @caml_globals_inited to i64*)
       ret i64 1
     }
 
-    define ghccc i8* @caml_apply3(i8* %arg, i8* %arg1, i8* %arg2, i8* %clos) gc "ocaml" {
+    define ocamlcc i8* @caml_apply3(i8* %arg, i8* %arg1, i8* %arg2, i8* %clos) gc "ocaml" {
     entry:
       %0 = getelementptr i8, i8* %clos, i64 8
       %1 = bitcast i8* %0 to i8**
@@ -174,14 +174,14 @@ let%expect_test "while example" =
       %8 = bitcast i8* %7 to i8**
       %9 = load i8*, i8** %8
       %func_cast = bitcast i8* %9 to i8* (i8*, i8*, i8*, i8*)*
-      %10 = call ghccc i8* %func_cast(i8* %arg, i8* %arg, i8* %arg, i8* %clos)
+      %10 = call ocamlcc i8* %func_cast(i8* %arg, i8* %arg, i8* %arg, i8* %clos)
       br label %merge
 
     else:                                             ; preds = %entry
       %11 = bitcast i8* %clos to i8**
       %12 = load i8*, i8** %11
       %func_cast3 = bitcast i8* %12 to i8* (i8*, i8*)*
-      %13 = call ghccc i8* %func_cast3(i8* %arg, i8* %clos)
+      %13 = call ocamlcc i8* %func_cast3(i8* %arg, i8* %clos)
       %14 = alloca i8*
       store i8* %13, i8** %14
       %15 = load i8*, i8** %14
@@ -189,7 +189,7 @@ let%expect_test "while example" =
       %17 = load i8*, i8** %16
       %18 = load i8*, i8** %14
       %func_cast4 = bitcast i8* %17 to i8* (i8*, i8*)*
-      %19 = call ghccc i8* %func_cast4(i8* %arg, i8* %18)
+      %19 = call ocamlcc i8* %func_cast4(i8* %arg, i8* %18)
       %20 = alloca i8*
       store i8* %19, i8** %20
       %21 = load i8*, i8** %20
@@ -197,7 +197,7 @@ let%expect_test "while example" =
       %23 = load i8*, i8** %22
       %24 = load i8*, i8** %20
       %func_cast5 = bitcast i8* %23 to i8* (i8*, i8*)*
-      %25 = call ghccc i8* %func_cast5(i8* %arg, i8* %24)
+      %25 = call ocamlcc i8* %func_cast5(i8* %arg, i8* %24)
       br label %merge
 
     merge:                                            ; preds = %else, %then
@@ -205,7 +205,7 @@ let%expect_test "while example" =
       ret i8* %iftmp
     }
 
-    define ghccc i8* @caml_apply2(i8* %arg, i8* %arg1, i8* %clos) gc "ocaml" {
+    define ocamlcc i8* @caml_apply2(i8* %arg, i8* %arg1, i8* %clos) gc "ocaml" {
     entry:
       %0 = getelementptr i8, i8* %clos, i64 8
       %1 = bitcast i8* %0 to i8**
@@ -221,14 +221,14 @@ let%expect_test "while example" =
       %8 = bitcast i8* %7 to i8**
       %9 = load i8*, i8** %8
       %func_cast = bitcast i8* %9 to i8* (i8*, i8*, i8*)*
-      %10 = call ghccc i8* %func_cast(i8* %arg, i8* %arg, i8* %clos)
+      %10 = call ocamlcc i8* %func_cast(i8* %arg, i8* %arg, i8* %clos)
       br label %merge
 
     else:                                             ; preds = %entry
       %11 = bitcast i8* %clos to i8**
       %12 = load i8*, i8** %11
       %func_cast2 = bitcast i8* %12 to i8* (i8*, i8*)*
-      %13 = call ghccc i8* %func_cast2(i8* %arg, i8* %clos)
+      %13 = call ocamlcc i8* %func_cast2(i8* %arg, i8* %clos)
       %14 = alloca i8*
       store i8* %13, i8** %14
       %15 = load i8*, i8** %14
@@ -236,7 +236,7 @@ let%expect_test "while example" =
       %17 = load i8*, i8** %16
       %18 = load i8*, i8** %14
       %func_cast3 = bitcast i8* %17 to i8* (i8*, i8*)*
-      %19 = call ghccc i8* %func_cast3(i8* %arg, i8* %18)
+      %19 = call ocamlcc i8* %func_cast3(i8* %arg, i8* %18)
       br label %merge
 
     merge:                                            ; preds = %else, %then

@@ -62,4 +62,4 @@ let builtin_functions ctx =
   ]
 ;;
 
-let ghc_calling_convention = 10
+let ocaml_calling_convention = 100

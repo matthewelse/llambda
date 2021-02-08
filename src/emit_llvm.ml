@@ -296,7 +296,7 @@ and codegen_operation t operation args (_ : Debug_info.t) =
     in
     let func = build_pointercast func new_func_type "func_cast" t.builder in
     let call = build_call func (List.to_array args) "" t.builder in
-    set_instruction_call_conv Declarations.ghc_calling_convention call;
+    set_instruction_call_conv Declarations.ocaml_calling_convention call;
     call
   | Capply _, [] -> raise_s [%message "capply with empty list"]
   | Caddv, [ pointer; offset ] ->
@@ -601,7 +601,7 @@ let emit ~ctx ~this_module (cmm : Cmm.phrase list) =
   List.iter cmm ~f:(function
       | Cfunction cfundecl ->
         let fundecl = Ir_module.lookup_function_exn this_module ~name:cfundecl.fun_name in
-        set_function_call_conv Declarations.ghc_calling_convention fundecl;
+        set_function_call_conv Declarations.ocaml_calling_convention fundecl;
         set_gc (Some "ocaml") fundecl;
         (* set argument names *)
         let args =
