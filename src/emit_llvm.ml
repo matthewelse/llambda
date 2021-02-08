@@ -658,7 +658,10 @@ let emit ~ctx ~this_module (cmm : Cmm.phrase list) =
                }
                cfundecl.fun_body
            in
-           build_ret ret_val builder |> (ignore : llvalue -> unit)
+           build_ret
+             (to_pointer_if_integer ~builder ~typ:(Declarations.value_type ctx) ret_val)
+             builder
+           |> (ignore : llvalue -> unit)
          with
         | exn ->
           delete_function fundecl;
