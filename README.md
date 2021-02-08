@@ -41,12 +41,13 @@ through clambda or flambda to produce c--. Compile directly from c-- to LLVM.
 - [x] recursive function calls?
 - [x] closures?
 - [x] C function calls
-- [ ] Calls to OCaml functions compiled with llambda
+- [x] Calls to OCaml functions compiled with llambda
 - [x] Use GHC's calling convention for external-facing functions (similar to
   OCaml's), maybe use fastcc for internal things <- unfortunately, GHC's calling
   convention is wrong...
 - [ ] exception handling
-- [ ] more expressive types for llvalues - distingui
+- [ ] more expressive types for llvalues - distinguish between value, addr and
+  int more cleanly.
 
 ## Issues with c--
 
