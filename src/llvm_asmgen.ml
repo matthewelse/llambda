@@ -60,29 +60,32 @@ let compile_genfuns f =
     (Cmm_helpers.generic_functions true [ Compilenv.current_unit_infos () ])
 ;;
 
-let assemble_llvm_ir infile outfile =
+let assemble_llvm_ir ~ir_filename ~obj_filename () =
   let result =
     (* We need to run -O3 to reduce the amount of stack space used, so the GC
     printer doesn't die *)
     Ccomp.command
       ("/Users/melse/Development/llambda/external/llvm/llvm-project/build/bin/opt -S -O3"
-      ^ " -o Hello_world.ll"
+      ^ " -o "
+      ^ Filename.quote ir_filename
       ^ " "
-      ^ Filename.quote infile)
+      ^ Filename.quote ir_filename)
   in
   if result = 0
   then
     Ccomp.command
-      ("/Users/melse/Development/llambda/external/llvm/llvm-project/build/bin/llc -filetype obj"
+      ("/Users/melse/Development/llambda/external/llvm/llvm-project/build/bin/llc \
+        -filetype obj"
       ^ " "
       ^ String.concat " " (Misc.debug_prefix_map_flags ())
       ^ " -o "
-      ^ Filename.quote outfile
-      ^ " Hello_world.ll" (* urgh LLVM uses the filename as the module name :( *))
+      ^ Filename.quote obj_filename
+      ^ " "
+      ^ ir_filename (* urgh LLVM uses the filename as the module name :( *))
   else result
 ;;
 
-let compile_unit asm_filename keep_asm obj_filename gen =
+let compile_unit ir_filename  keep_asm obj_filename gen =
   let create_asm =
     should_emit () && (keep_asm || not !Emitaux.binary_backend_available)
   in
@@ -90,19 +93,22 @@ let compile_unit asm_filename keep_asm obj_filename gen =
   Misc.try_finally
     ~exceptionally:(fun () -> remove_file obj_filename)
     (fun () ->
-      if create_asm then Emitaux.output_channel := open_out asm_filename;
+      if create_asm then Emitaux.output_channel := open_out ir_filename;
       Misc.try_finally
         gen
         ~always:(fun () -> if create_asm then close_out !Emitaux.output_channel)
         ~exceptionally:(fun () ->
-          if create_asm && not keep_asm then remove_file asm_filename);
+          if create_asm && not keep_asm then remove_file ir_filename);
       if should_emit ()
       then (
         let assemble_result =
-          Profile.record "assemble" (assemble_llvm_ir asm_filename) obj_filename
+          Profile.record
+            "assemble"
+            (assemble_llvm_ir ~ir_filename ~obj_filename)
+            ()
         in
-        if assemble_result <> 0 then raise (Error (Assembler_error asm_filename)));
-      if create_asm && not keep_asm then remove_file asm_filename)
+        if assemble_result <> 0 then raise (Error (Assembler_error ir_filename)));
+      if create_asm && not keep_asm then remove_file ir_filename)
 ;;
 
 let end_gen_implementation ?toplevel ~ctx ~this_module (clambda : Clambda.with_constants) =
@@ -145,10 +151,8 @@ let compile_implementation
     ~ppf_dump
     (program : Lambda.program)
   =
-  let asmfile =
-    if !keep_asm_file || !Emitaux.binary_backend_available
-    then prefixname ^ ".ll"
-    else Filename.temp_file "camlasm" ".ll"
+  let irfile =
+    (Ident.name program.module_ident ^ ".ll")
   in
   let ctx = Llvm.global_context () in
   Wrap_llvm.Ir_module.with_module
@@ -156,7 +160,7 @@ let compile_implementation
     ~ctx
     (Ident.name program.module_ident)
     (fun impl_module ->
-      compile_unit asmfile !keep_asm_file (prefixname ^ ext_obj) (fun () ->
+      compile_unit irfile !keep_asm_file (prefixname ^ ext_obj) (fun () ->
           Ident.Set.iter Compilenv.require_global program.required_globals;
           let clambda_with_constants =
             middle_end ~backend ~filename ~prefixname ~ppf_dump program

@@ -10,6 +10,8 @@
 *.cmxs
 *.cmxa
 
+a.out
+
 # dune working directory
 _build/
 
