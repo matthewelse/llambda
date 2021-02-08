@@ -43,7 +43,8 @@ through clambda or flambda to produce c--. Compile directly from c-- to LLVM.
 - [x] C function calls
 - [ ] Calls to OCaml functions compiled with llambda
 - [x] Use GHC's calling convention for external-facing functions (similar to
-  OCaml's), maybe use fastcc for internal things
+  OCaml's), maybe use fastcc for internal things <- unfortunately, GHC's calling
+  convention is wrong...
 - [ ] exception handling
 - [ ] more expressive types for llvalues - distingui
 
@@ -51,3 +52,8 @@ through clambda or flambda to produce c--. Compile directly from c-- to LLVM.
 
 It's hard to distinguish between integers and pointers in C--, it basically
 doesn't have enough type information for something like LLVM.
+
+## LLVM changes
+
+- Need to add an OCaml calling convention
+- Some way of avoiding using R15 (and R14?)
