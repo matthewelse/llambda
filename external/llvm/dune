@@ -1,0 +1,6 @@
+(dirs :standard \ llvm-project) 
+
+(env
+  (dev
+    (flags (:standard -w "-50-32-37-34"))))
+
