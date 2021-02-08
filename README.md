@@ -55,5 +55,6 @@ doesn't have enough type information for something like LLVM.
 
 ## LLVM changes
 
-- Need to add an OCaml calling convention
-- Some way of avoiding using R15 (and R14?)
+- [x] Need to add an OCaml calling convention
+- [ ] Some way of avoiding using R15 (and R14?)
+- [ ] Use the fork of LLVM in the submodule (and the ocaml bindings via dune)
