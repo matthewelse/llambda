@@ -130,6 +130,7 @@ type t =
       String.Table.t
   ; fundecl : Ir_value.t
   ; catches : Ir_basic_block.t Int.Table.t
+  ; globals : Ir_value.t String.Table.t
   }
 [@@deriving sexp_of]
 
@@ -175,16 +176,21 @@ let rec codegen_expr t (expr : Cmm.expression) =
     body
   | Cconst_symbol (name, _) ->
     let ptr =
-      match lookup_global name t.this_module with
-      | Some global -> global
+      match String.Table.find t.globals name with
+      | Some global_ptr ->
+        let real_ptr = build_load global_ptr "real_ptr" t.builder in
+        real_ptr
       | None ->
-        (match lookup_function name t.this_module with
+        (match lookup_global name t.this_module with
+        | Some global -> global
         | None ->
-          declare_global
-            (Declarations.type_of_machtype_component t.ctx Val)
-            name
-            t.this_module
-        | Some fn -> fn)
+          (match lookup_function name t.this_module with
+          | None ->
+            declare_global
+              (Declarations.type_of_machtype_component t.ctx Val)
+              name
+              t.this_module
+          | Some fn -> fn))
     in
     build_pointercast
       ptr
@@ -415,16 +421,29 @@ and codegen_operation t operation args (_ : Debug_info.t) =
         t.builder
     in
     ptr
-  | Cextcall (name, _, _does_alloc, _label), args ->
+  | Cextcall (name, return_type, does_alloc, _label), args ->
     let arg_types = List.map args ~f:(fun _ -> Declarations.value_type t.ctx) in
     let func = Ir_module.lookup_function_exn t.this_module ~name in
-    build_call
-      func
-      (Array.of_list
-         (List.map2_exn args arg_types ~f:(fun arg typ ->
-              codegen_expr t arg |> to_pointer_if_integer ~builder:t.builder ~typ)))
-      ""
-      t.builder
+    let args =
+      List.map2_exn args arg_types ~f:(fun arg typ ->
+          codegen_expr t arg |> to_pointer_if_integer ~builder:t.builder ~typ)
+    in
+    if does_alloc
+    then (
+      let args = [ func ] @ args in
+      let function_type =
+        Ir_type.function_type
+          ~arg_types:(List.map args ~f:type_of)
+          ~return_type:(Declarations.type_of_machtype t.ctx return_type)
+      in
+      let caml_c_call =
+        Ir_module.lookup_global t.this_module ~name:"caml_c_call" |> Option.value_exn
+      in
+      let caml_c_call = build_pointercast caml_c_call function_type "" t.builder in
+      let call = build_call caml_c_call (Array.of_list ([ func ] @ args)) "" t.builder in
+      set_instruction_call_conv 101 call;
+      call)
+    else build_call func (Array.of_list args) "" t.builder
   | _ -> raise_s [%message "I don't know how to compile this operator."]
 ;;
 
@@ -525,8 +544,15 @@ let structify ~ctx ~this_module (items : Cmm.data_item list) =
 
 let emit ~ctx ~this_module (cmm : Cmm.phrase list) =
   let builder = Ir_builder.create ctx in
+  let pointer_globals = String.Table.create () in
   List.iter (Declarations.builtin_functions ctx) ~f:(fun (name, funtype) ->
       Ir_module.declare_function' this_module ~name ~funtype);
+  let (_caml_c_call : llvalue) =
+    Ir_module.declare_global
+      this_module
+      ~name:"caml_c_call"
+      (Declarations.void_pointer_type ctx)
+  in
   (* Pre-define functions and globals to avoid issues with ordering. *)
   List.iter cmm ~f:(function
       | Cfunction cfundecl ->
@@ -597,6 +623,7 @@ let emit ~ctx ~this_module (cmm : Cmm.phrase list) =
           let pointers = pointers ~index:0 ~pointer:anon_global items in
           List.iter pointers ~f:(fun (linkage, name, route) ->
               let glob = Ir_module.define_global this_module ~name route in
+              String.Table.add_exn pointer_globals ~key:name ~data:glob;
               set_linkage linkage glob)));
   List.iter cmm ~f:(function
       | Cfunction cfundecl ->
@@ -621,7 +648,14 @@ let emit ~ctx ~this_module (cmm : Cmm.phrase list) =
         (try
            let ret_val =
              codegen_expr
-               { ctx; builder; env; this_module; fundecl; catches }
+               { ctx
+               ; builder
+               ; env
+               ; this_module
+               ; fundecl
+               ; catches
+               ; globals = pointer_globals
+               }
                cfundecl.fun_body
            in
            build_ret ret_val builder |> (ignore : llvalue -> unit)

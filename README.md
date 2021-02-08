@@ -58,3 +58,24 @@ doesn't have enough type information for something like LLVM.
 - [x] Need to add an OCaml calling convention
 - [ ] Some way of avoiding using R15 (and R14?)
 - [ ] Use the fork of LLVM in the submodule (and the ocaml bindings via dune)
+
+## Building LLVM & OCaml bindings
+
+### Build LLVM:
+
+```bash
+cd external/llvm/llvm-project
+mkdir build
+cd build
+cmake -G Ninja -DLLVM_ENABLE_PROJECTS='' -DCMAKE_BUILD_TYPE=Debug -DLLVM_ENABLE_ASSERTIONS=On -DLLVM_TARGETS_TO_BUILD="X86" ../llvm
+ninja # this is a good time to go and get some lunch
+```
+
+### Set up bindings
+
+```bash
+cd external/llvm
+./setup.sh
+dune build
+```
+

@@ -65,7 +65,7 @@ let assemble_llvm_ir infile outfile =
     (* We need to run -O3 to reduce the amount of stack space used, so the GC
     printer doesn't die *)
     Ccomp.command
-      ("/usr/local/opt/llvm@10/bin/opt -S -O3"
+      ("/Users/melse/Development/llambda/external/llvm/llvm-project/build/bin/opt -S -O3"
       ^ " -o Hello_world.ll"
       ^ " "
       ^ Filename.quote infile)
@@ -73,7 +73,7 @@ let assemble_llvm_ir infile outfile =
   if result = 0
   then
     Ccomp.command
-      ("/usr/local/opt/llvm@10/bin/llc -filetype obj"
+      ("/Users/melse/Development/llambda/external/llvm/llvm-project/build/bin/llc -filetype obj"
       ^ " "
       ^ String.concat " " (Misc.debug_prefix_map_flags ())
       ^ " -o "
