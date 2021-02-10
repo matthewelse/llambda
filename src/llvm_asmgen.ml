@@ -75,7 +75,7 @@ let assemble_llvm_ir ~ir_filename ~obj_filename () =
   then
     Ccomp.command
       ("/Users/melse/Development/llambda/external/llvm/llvm-project/build/bin/llc \
-        -filetype obj"
+        -filetype obj -O3 "
       ^ " "
       ^ String.concat " " (Misc.debug_prefix_map_flags ())
       ^ " -o "

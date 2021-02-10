@@ -39,6 +39,13 @@ module With_context (Context : Context) = struct
   let val_type = pointer_type (i8_type ctx)
   let float_type = double_type ctx
 
+  let llvm_gcroot =
+    Llvm.declare_function
+      "llvm.gcroot"
+      (function_type (void_type ctx) [| pointer_type val_type; val_type |])
+      this_module
+  ;;
+
   let type_of (kind : Cmm.machtype_component option) =
     match kind with
     | None -> void_type ctx
@@ -650,9 +657,15 @@ module With_context (Context : Context) = struct
       let length = const_int (List.length data) in
       (* eprint_s
         [%message "building call" (caml_alloc : Ir_value.t) (length : t) (tag_value : t)]; *)
+      (* LLVM is sad if we try to do this :( *)
+      (* let ptr_ptr = build_alloca (pointer_type (i8_type ctx)) "alloc_ptr" builder in *)
+      (* let (_ : llvalue) =
+        build_call llvm_gcroot [| ptr_ptr; const_pointer_null val_type |] "" builder
+      in *)
       let ptr =
         build_call caml_alloc [| length.value; tag_value.value |] "alloc" builder
       in
+      (* let (_ : llvalue) = build_store ptr ptr_ptr builder in *)
       List.iteri data ~f:(fun i elem ->
           let elem_ptr =
             build_in_bounds_gep ptr [| (const_int (i * 8)).value |] "gep" builder

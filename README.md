@@ -48,6 +48,7 @@ through clambda or flambda to produce c--. Compile directly from c-- to LLVM.
 - [ ] exception handling
 - [ ] more expressive types for llvalues - distinguish between value, addr and
   int more cleanly.
+- [ ] handle allocations properly (GC segfaults right now)
 
 ## Issues with c--
 

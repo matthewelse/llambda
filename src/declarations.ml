@@ -49,13 +49,4 @@ let type_of_memory_chunk ctx (chunk : Cmm.memory_chunk) =
   | Single -> float_type ctx
   | Double | Double_u -> double_type ctx
 ;;
-
-let builtin_functions ctx =
-  [ ( "llvm.gcroot"
-    , Ir_type.function_type
-        ~arg_types:[ pointer_type (void_pointer_type ctx); void_pointer_type ctx ]
-        ~return_type:(void_type ctx) )
-  ]
-;;
-
 let ocaml_calling_convention = 100

@@ -16,5 +16,3 @@ val type_of_machtype_component : Ir_context.t -> Cmm.machtype_component -> Ir_ty
 val type_of_operation : Ir_context.t -> Cmm.operation -> Ir_type.t
 val type_of_memory_chunk : Ir_context.t -> Cmm.memory_chunk -> Ir_type.t
 
-(*_ *)
-val builtin_functions : Ir_context.t -> (string * Ir_type.t) list

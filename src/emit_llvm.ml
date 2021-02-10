@@ -39,8 +39,6 @@ let value_of_data_item (data_item : Cmm.data_item) =
 let emit ~ctx ~this_module (cmm : Cmm.phrase list) =
   let builder = Ir_builder.create ctx in
   let env = String.Table.create () in
-  List.iter (Declarations.builtin_functions ctx) ~f:(fun (name, funtype) ->
-      Ir_module.declare_function' this_module ~name ~funtype);
   (* Pre-define functions and globals to avoid issues with ordering. *)
   List.iter cmm ~f:(function
       | Cfunction cfundecl ->
