@@ -28,6 +28,15 @@ module Cmm = struct
     let s = Ocaml_optcomp.Printcmm.operation Ocaml_common.Debuginfo.none t in
     Sexp.Atom s
   ;;
+
+  let sexp_of_machtype_component t =
+    let s =
+      Ocaml_optcomp.Printcmm.machtype_component Format.str_formatter t;
+      Format.flush_str_formatter ()
+    in
+    Sexp.Atom s
+  ;;
+
 end
 
 module Cmmgen = Ocaml_optcomp.Cmmgen

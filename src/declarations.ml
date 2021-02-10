@@ -51,11 +51,7 @@ let type_of_memory_chunk ctx (chunk : Cmm.memory_chunk) =
 ;;
 
 let builtin_functions ctx =
-  [ ( "caml_alloc"
-    , Ir_type.function_type
-        ~arg_types:[ i64_type ctx; i32_type ctx ]
-        ~return_type:(void_pointer_type ctx) )
-  ; ( "llvm.gcroot"
+  [ ( "llvm.gcroot"
     , Ir_type.function_type
         ~arg_types:[ pointer_type (void_pointer_type ctx); void_pointer_type ctx ]
         ~return_type:(void_type ctx) )
