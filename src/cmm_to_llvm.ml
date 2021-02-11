@@ -62,7 +62,7 @@ module With_context (Context : Context) = struct
     (* This doesn't work with allocatable registers :( *)
     let read_register register =
       let metadata = Llvm.mdstring ctx register in
-      let metadata = Llvm.mdnode ctx [|metadata|] in
+      let metadata = Llvm.mdnode ctx [| metadata |] in
       let func =
         Llvm.declare_function
           "llvm.read_register.i64"
@@ -74,7 +74,7 @@ module With_context (Context : Context) = struct
 
     let write_register register value =
       let metadata = Llvm.mdstring ctx register in
-      let metadata = Llvm.mdnode ctx [|metadata|] in
+      let metadata = Llvm.mdnode ctx [| metadata |] in
       let func =
         Llvm.declare_function
           "llvm.write_register.i64"
@@ -753,7 +753,7 @@ module With_context (Context : Context) = struct
       let rsp' = build_gep r14_as_ptr [| (const_int 1).value |] "" builder in
       let r14' = build_load r14_as_ptr "" builder in
       let (_ : llvalue) = Intrinsics.write_register "r14" r14' in
-      let rsp' = build_ptrtoint rsp' int_type "" builder in 
+      let rsp' = build_ptrtoint rsp' int_type "" builder in
       let (_ : llvalue) = Intrinsics.write_register "rsp" rsp' in
       { kind = `No_return; value = build_ret exn_val.value builder }
       (* assert false *)

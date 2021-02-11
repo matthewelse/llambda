@@ -36,7 +36,6 @@ module Cmm = struct
     in
     Sexp.Atom s
   ;;
-
 end
 
 module Cmmgen = Ocaml_optcomp.Cmmgen

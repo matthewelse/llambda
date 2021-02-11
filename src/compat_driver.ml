@@ -96,8 +96,8 @@ module Optcompile = struct
       let backend info typed =
         Compilenv.reset ?packname:!Clflags.for_package info.module_name;
         if Config.flambda
-          then flambda ~llvm_flags info backend typed
-          else clambda ~llvm_flags info backend typed
+        then flambda ~llvm_flags info backend typed
+        else clambda ~llvm_flags info backend typed
       in
       with_info ~source_file ~output_prefix ~dump_ext:"cmx"
       @@ fun info -> Compile_common.implementation info ~backend)
@@ -119,10 +119,7 @@ let main ~use_llvm () =
       ];
     Clflags.add_arguments
       __LOC__
-      [ ( "-llvm-flags"
-        , (Arg.Set_string llvm_args)
-        , "<flags> Flags to pass to LLVM." )
-      ];
+      [ "-llvm-flags", Arg.Set_string llvm_args, "<flags> Flags to pass to LLVM." ];
     Clflags.parse_arguments anonymous usage;
     Compmisc.read_clflags_from_env ();
     if !Clflags.plugin then fatal "-plugin is only supported up to OCaml 4.08.0";
