@@ -45,7 +45,7 @@ module Optcompile = struct
   let tool_name = "llambda"
   let with_info = Compile_common.with_info ~native:true ~tool_name
 
-  let llvm ~llvm_flags i backend typed =
+  let clambda ~llvm_flags i backend typed =
     Clflags.use_inlining_arguments_set Clflags.classic_arguments;
     typed
     |> Profile.(record transl) (Translmod.transl_store_implementation i.module_name)
@@ -64,6 +64,25 @@ module Optcompile = struct
            Compilenv.save_unit_info (cmx i))
   ;;
 
+  let flambda ~llvm_flags i backend typed =
+    Clflags.use_inlining_arguments_set Clflags.classic_arguments;
+    typed
+    |> Profile.(record transl) (Translmod.transl_implementation_flambda i.module_name)
+    |> print_if i.ppf_dump Clflags.dump_rawlambda Printlambda.program
+    |> Profile.(record generate) (fun program ->
+           let code = Simplif.simplify_lambda program.Lambda.code in
+           { program with Lambda.code }
+           |> print_if i.ppf_dump Clflags.dump_lambda Printlambda.program
+           |> Llvm_asmgen.compile_implementation
+                ~llvm_flags
+                ~backend
+                ~filename:i.source_file
+                ~prefixname:i.output_prefix
+                ~middle_end:Flambda_middle_end.lambda_to_clambda
+                ~ppf_dump:i.ppf_dump;
+           Compilenv.save_unit_info (cmx i))
+  ;;
+
   let implementation
       ~llvm_flags
       ~use_llvm
@@ -76,7 +95,9 @@ module Optcompile = struct
     else (
       let backend info typed =
         Compilenv.reset ?packname:!Clflags.for_package info.module_name;
-        llvm ~llvm_flags info backend typed
+        if Config.flambda
+          then flambda ~llvm_flags info backend typed
+          else clambda ~llvm_flags info backend typed
       in
       with_info ~source_file ~output_prefix ~dump_ext:"cmx"
       @@ fun info -> Compile_common.implementation info ~backend)
