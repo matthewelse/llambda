@@ -473,7 +473,7 @@ module With_context (Context : Context) = struct
         |> promote_value_if_necessary_exn ~new_machtype:(Some Val)
       in
       let right = build_ptrtoint right.value int_type "" builder in
-      { kind = Some Addr (* ? *); value = build_gep left.value [| right |] "" builder }
+      { kind = Some Val; value = build_gep left.value [| right |] "" builder }
     | Caddv, _ -> assert false
     | Cadda, [ left; right ] ->
       let left =
