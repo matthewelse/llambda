@@ -4,7 +4,7 @@ open! Import
 type t =
   | Pointer of
       { ptr : Ir_value.t
-      ; underlying_kind : Cmm.machtype_component option
+      ; underlying_kind : [ `Void | `No_return | `Some of Cmm.machtype_component ]
       ; mutability : [ `Mutable | `Immutable ]
       }
   | Value of

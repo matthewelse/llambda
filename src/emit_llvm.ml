@@ -85,8 +85,7 @@ let emit ~ctx ~this_module (cmm : Cmm.phrase list) =
               ~data:
                 (Var.Value
                    { value = arg
-                   ; kind =
-                       Cmm_to_llvm.machtype_option_of_array machtype |> Option.value_exn
+                   ; kind = (match machtype with [| x |] -> x | _ -> assert false)
                    }));
         String.Table.add_exn
           env
@@ -114,7 +113,7 @@ let emit ~ctx ~this_module (cmm : Cmm.phrase list) =
                        ~llvm_function:
                          (Llvm.lookup_function name this_module : Ir_value.t option)]; *)
                  if String.equal name cfundecl.fun_name
-                 then Some (`Direct { Cmm_to_llvm.value = fundecl; kind = Some Addr })
+                 then Some (`Direct { Cmm_to_llvm.value = fundecl; kind = `Some Addr })
                  else (
                    match Llvm.lookup_global name this_module with
                    | None ->
@@ -123,17 +122,19 @@ let emit ~ctx ~this_module (cmm : Cmm.phrase list) =
                        let g =
                          build_pointercast g (pointer_type (i8_type ctx)) "" builder
                        in
-                       Some (`Direct { Cmm_to_llvm.value = g; kind = Some Addr })
+                       Some (`Direct { Cmm_to_llvm.value = g; kind = `Some Addr })
                      | None ->
                        let g = declare_global (i8_type ctx) name this_module in
-                       Some (`Direct { Cmm_to_llvm.value = g; kind = Some Int }))
-                   | Some g -> Some (`Direct { Cmm_to_llvm.value = g; kind = Some Val }))
+                       Some (`Direct { Cmm_to_llvm.value = g; kind = `Some Int }))
+                   | Some g -> Some (`Direct { Cmm_to_llvm.value = g; kind = `Some Val }))
                ;;
              end)
            in
            let ret_val = Cmm_to_llvm.compile_expression cfundecl.fun_body in
            build_ret
-             (Cmm_to_llvm.promote_value_if_necessary_exn ~new_machtype:(Some Val) ret_val)
+             (Cmm_to_llvm.promote_value_if_necessary_exn
+                ~new_machtype:(`Some Val)
+                ret_val)
                .value
              builder
            |> (ignore : llvalue -> unit)
