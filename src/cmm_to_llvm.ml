@@ -227,15 +227,13 @@ module With_context (Context : Context) = struct
     | Clet (var, value, body) ->
       let var_name = Backend_var.With_provenance.name var in
       let var_value = compile_expression value in
-      let var_ptr = Llvm.build_alloca (Llvm.type_of var_value.value) var_name builder in
-      let (_ : Ir_value.t) = build_store var_value.value var_ptr builder in
       with_var_in_env
         ~name:var_name
         ~value:
-          (Pointer
-             { ptr = var_ptr; underlying_kind = var_value.kind; mutability = `Immutable })
+          (Value { value = var_value.value; kind = var_value.kind |> Option.value_exn })
         ~f:(fun () -> compile_expression body)
     | Clet_mut (var, machtype, value, body) ->
+      (* Maybe we should convert these to ssa? *)
       let var_name = Backend_var.With_provenance.name var in
       let var_value =
         compile_expression value
