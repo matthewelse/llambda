@@ -45,7 +45,7 @@ module Optcompile = struct
   let tool_name = "llambda"
   let with_info = Compile_common.with_info ~native:true ~tool_name
 
-  let llvm i backend typed =
+  let llvm ~llvm_flags i backend typed =
     Clflags.use_inlining_arguments_set Clflags.classic_arguments;
     typed
     |> Profile.(record transl) (Translmod.transl_store_implementation i.module_name)
@@ -55,6 +55,7 @@ module Optcompile = struct
            { program with Lambda.code }
            |> print_if i.ppf_dump Clflags.dump_lambda Printlambda.program
            |> Llvm_asmgen.compile_implementation
+                ~llvm_flags
                 ~backend
                 ~filename:i.source_file
                 ~prefixname:i.output_prefix
@@ -64,6 +65,7 @@ module Optcompile = struct
   ;;
 
   let implementation
+      ~llvm_flags
       ~use_llvm
       ~(backend : (module Backend_intf.S))
       ~source_file
@@ -74,7 +76,7 @@ module Optcompile = struct
     else (
       let backend info typed =
         Compilenv.reset ?packname:!Clflags.for_package info.module_name;
-        llvm info backend typed
+        llvm ~llvm_flags info backend typed
       in
       with_info ~source_file ~output_prefix ~dump_ext:"cmx"
       @@ fun info -> Compile_common.implementation info ~backend)
@@ -84,6 +86,7 @@ end
 let main ~use_llvm () =
   native_code := true;
   let ppf = Format.err_formatter in
+  let llvm_args = ref "" in
   try
     readenv ppf Before_args;
     Clflags.add_arguments __LOC__ (Arch.command_line_options @ Options.list);
@@ -93,13 +96,19 @@ let main ~use_llvm () =
         , Arg.Unit Makedepend.main_from_option
         , "<options> Compute dependencies (use 'ocamlopt -depend -help' for details)" )
       ];
+    Clflags.add_arguments
+      __LOC__
+      [ ( "-llvm-flags"
+        , (Arg.Set_string llvm_args)
+        , "<flags> Flags to pass to LLVM." )
+      ];
     Clflags.parse_arguments anonymous usage;
     Compmisc.read_clflags_from_env ();
     if !Clflags.plugin then fatal "-plugin is only supported up to OCaml 4.08.0";
     (try
        Compenv.process_deferred_actions
          ( ppf
-         , Optcompile.implementation ~use_llvm ~backend
+         , Optcompile.implementation ~llvm_flags:!llvm_args ~use_llvm ~backend
          , Optcompile.interface
          , ".cmx"
          , ".cmxa" )

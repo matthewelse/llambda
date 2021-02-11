@@ -60,12 +60,14 @@ let compile_genfuns f =
     (Cmm_helpers.generic_functions true [ Compilenv.current_unit_infos () ])
 ;;
 
-let assemble_llvm_ir ~ir_filename ~obj_filename () =
+let assemble_llvm_ir ~llvm_flags ~ir_filename ~obj_filename () =
   let result =
     (* We need to run -O3 to reduce the amount of stack space used, so the GC
     printer doesn't die *)
     Ccomp.command
-      ("/Users/melse/Development/llambda/external/llvm/llvm-project/build/bin/opt -S -O3"
+      ("/Users/melse/Development/llambda/external/llvm/llvm-project/build/bin/opt -S \
+        -mem2reg "
+      ^ llvm_flags
       ^ " -o "
       ^ Filename.quote ir_filename
       ^ " "
@@ -75,7 +77,8 @@ let assemble_llvm_ir ~ir_filename ~obj_filename () =
   then
     Ccomp.command
       ("/Users/melse/Development/llambda/external/llvm/llvm-project/build/bin/llc \
-        -filetype obj -O3 "
+        -filetype obj "
+      ^ llvm_flags
       ^ " "
       ^ String.concat " " (Misc.debug_prefix_map_flags ())
       ^ " -o "
@@ -85,7 +88,7 @@ let assemble_llvm_ir ~ir_filename ~obj_filename () =
   else result
 ;;
 
-let compile_unit ir_filename  keep_asm obj_filename gen =
+let compile_unit ~llvm_flags ir_filename keep_asm obj_filename gen =
   let create_asm =
     should_emit () && (keep_asm || not !Emitaux.binary_backend_available)
   in
@@ -104,7 +107,7 @@ let compile_unit ir_filename  keep_asm obj_filename gen =
         let assemble_result =
           Profile.record
             "assemble"
-            (assemble_llvm_ir ~ir_filename ~obj_filename)
+            (assemble_llvm_ir ~llvm_flags ~ir_filename ~obj_filename)
             ()
         in
         if assemble_result <> 0 then raise (Error (Assembler_error ir_filename)));
@@ -144,6 +147,7 @@ type middle_end =
 
 let compile_implementation
     ?toplevel
+    ~llvm_flags
     ~backend
     ~filename
     ~prefixname
@@ -151,16 +155,14 @@ let compile_implementation
     ~ppf_dump
     (program : Lambda.program)
   =
-  let irfile =
-    (Ident.name program.module_ident ^ ".ll")
-  in
+  let irfile = Ident.name program.module_ident ^ ".ll" in
   let ctx = Llvm.global_context () in
   Wrap_llvm.Ir_module.with_module
     ~target_triple:"x86_64-apple-macosx10.15.0"
     ~ctx
     (Ident.name program.module_ident)
     (fun impl_module ->
-      compile_unit irfile !keep_asm_file (prefixname ^ ext_obj) (fun () ->
+      compile_unit ~llvm_flags irfile !keep_asm_file (prefixname ^ ext_obj) (fun () ->
           Ident.Set.iter Compilenv.require_global program.required_globals;
           let clambda_with_constants =
             middle_end ~backend ~filename ~prefixname ~ppf_dump program
