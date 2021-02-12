@@ -6,7 +6,7 @@ module Backend_var = Ocaml_optcomp.Backend_var
 
 type t =
   { value : llvalue
-  ; kind : [ `Void | `No_return | `Some of Cmm.machtype_component ]
+  ; kind : Var.Kind.t
   }
 [@@deriving sexp_of]
 
@@ -21,16 +21,6 @@ module type Context = sig
   (** Lookup a global symbol. *)
   val lookup_symbol : string -> [ `Direct of t | `Indirect of t ] option
 end
-
-let machtype_option_of_array = function
-  | [||] -> `Void
-  | [| x |] -> `Some x
-  | machtype ->
-    raise_s
-      [%message
-        "Found a machtype with more than one element."
-          (machtype : Cmm.machtype_component array)]
-;;
 
 module With_context (Context : Context) = struct
   open Context
@@ -92,28 +82,22 @@ module With_context (Context : Context) = struct
       this_module
   ;;
 
-  let type_of (kind : [ `Void | `No_return | `Some of Cmm.machtype_component ]) =
-    match kind with
-    | `Void -> void_type
-    | `Some Int -> int_type
-    | `Some Val | `Some Addr -> val_type
-    | `Some Float -> float_type
-    | `No_return -> void_type
-  ;;
-
-  let const_int value = { value = Llvm.const_int int_type value; kind = `Some Int }
+  let type_of_kind kind = Var.Kind.lltype_of_t ~ctx kind
+  let const_int value = { value = Llvm.const_int int_type value; kind = Machtype Int }
 
   let const_int64 ?(signed = true) value =
-    { value = Llvm.const_of_int64 int_type value signed; kind = `Some Int }
+    { value = Llvm.const_of_int64 int_type value signed; kind = Machtype Int }
   ;;
 
   let const_pointer value =
     { value = Llvm.const_inttoptr (Llvm.const_int int_type value) val_type
-    ; kind = `Some Val
+    ; kind = Machtype Val
     }
   ;;
 
-  let const_float value = { value = Llvm.const_float float_type value; kind = `Some Int }
+  let const_float value =
+    { value = Llvm.const_float float_type value; kind = Machtype Int }
+  ;;
 
   let with_var_in_env ~name ~value ~f =
     let previous = String.Table.find env name in
@@ -135,19 +119,15 @@ module With_context (Context : Context) = struct
     result
   ;;
 
-  let promote_value_if_necessary
-      ~(new_machtype : [ `Void | `No_return | `Some of Cmm.machtype_component ])
-      t
-      : t option
-    =
+  let promote_value_if_necessary ~(new_machtype : Var.Kind.t) t : t option =
     match new_machtype, t.kind with
-    | `Void, `Void -> Some t
-    | `Some Int, `Some Int
-    | `Some Val, `Some Val
-    | `Some Addr, `Some Addr
-    | `Some Float, `Some Float ->
+    | Void, Void -> Some t
+    | Machtype Int, Machtype Int
+    | Machtype Val, Machtype Val
+    | Machtype Addr, Machtype Addr
+    | Machtype Float, Machtype Float ->
       Some t
-    | `Some (Addr | Val), `Some Int ->
+    | Machtype (Addr | Val), Machtype Int ->
       (* print_s
         [%message
           "promoting"
@@ -159,36 +139,32 @@ module With_context (Context : Context) = struct
         { kind = new_machtype
         ; value = Llvm.build_inttoptr t.value val_type "promote" builder
         }
-    | `Some Addr, `Some Val -> Some { t with kind = new_machtype }
-    | `Void, _
-    | _, `Void
-    | `Some Int, `Some (Addr | Val | Float)
-    | `Some Val, `Some (Addr | Float)
-    | `Some Addr, `Some Float
-    | `Some Float, `Some (Addr | Val | Int) ->
+    | Machtype Addr, Machtype Val -> Some { t with kind = new_machtype }
+    | Void, _
+    | _, Void
+    | Machtype Int, Machtype (Addr | Val | Float)
+    | Machtype Val, Machtype (Addr | Float)
+    | Machtype Addr, Machtype Float
+    | Machtype Float, Machtype (Addr | Val | Int) ->
       None
-    | `No_return, _ | _, `No_return -> Some t
+    | Never_returns, _ | _, Never_returns -> Some t
   ;;
 
   let promote_value_if_necessary_exn ~new_machtype t =
     match promote_value_if_necessary ~new_machtype t with
     | Some t -> t
     | None ->
-      raise_s
-        [%message
-          "Unable to promote value."
-            (new_machtype : [ `Void | `No_return | `Some of Cmm.machtype_component ])
-            (t : t)]
+      raise_s [%message "Unable to promote value." (new_machtype : Var.Kind.t) (t : t)]
   ;;
 
   let cast_to_int_if_necessary_exn t =
     match t.kind with
-    | `Void | `Some Float | `Some Addr ->
+    | Void | Machtype Float | Machtype Addr ->
       raise_s [%message "Cannot demomote addresses or floats to integer."]
-    | `Some Int -> t
-    | `Some Val ->
-      { value = build_ptrtoint t.value int_type "" builder; kind = `Some Int }
-    | `No_return -> t
+    | Machtype Int -> t
+    | Machtype Val ->
+      { value = build_ptrtoint t.value int_type "" builder; kind = Machtype Int }
+    | Never_returns -> t
   ;;
 
   let compile_int_binop ~(operation : Cmm.operation) left right =
@@ -211,13 +187,13 @@ module With_context (Context : Context) = struct
     let left = cast_to_int_if_necessary_exn left in
     let right = cast_to_int_if_necessary_exn right in
     let value = build_llvm_op left.value right.value "binop" builder in
-    { value; kind = `Some Int }
+    { value; kind = Machtype Int }
   ;;
 
   let require_float (t : t) =
     match t.kind with
-    | `Some Float | `No_return -> ()
-    | `Some (Val | Addr | Int) | `Void ->
+    | Machtype Float | Never_returns -> ()
+    | Machtype (Val | Addr | Int) | Void ->
       raise_s [%message "Received an float operation argument that isn't an float."]
   ;;
 
@@ -230,10 +206,10 @@ module With_context (Context : Context) = struct
       | Cdivf -> build_fdiv
       | _ -> assert false
     in
-    let left = promote_value_if_necessary_exn ~new_machtype:(`Some Float) left in
-    let right = promote_value_if_necessary_exn ~new_machtype:(`Some Float) right in
+    let left = promote_value_if_necessary_exn ~new_machtype:(Machtype Float) left in
+    let right = promote_value_if_necessary_exn ~new_machtype:(Machtype Float) right in
     let value = build_llvm_op left.value right.value "binop" builder in
-    { value; kind = `Some Float }
+    { value; kind = Machtype Float }
   ;;
 
   let build_fabs value name builder =
@@ -250,9 +226,9 @@ module With_context (Context : Context) = struct
     let build_llvm_op =
       match operation with Cabsf -> build_fabs | Cnegf -> build_fneg | _ -> assert false
     in
-    let value = promote_value_if_necessary_exn ~new_machtype:(`Some Float) value in
+    let value = promote_value_if_necessary_exn ~new_machtype:(Machtype Float) value in
     let value = build_llvm_op value.value "unop" builder in
-    { value; kind = `Some Float }
+    { value; kind = Machtype Float }
   ;;
 
   let rec compile_expression (expr : Cmm.expression) : t =
@@ -266,10 +242,10 @@ module With_context (Context : Context) = struct
     | Cconst_symbol (name, _) ->
       (match lookup_symbol name with
       | Some (`Indirect { value = global_ptr; kind }) ->
-        let new_ptr_kind = pointer_type (type_of kind) in
+        let new_ptr_kind = pointer_type (type_of_kind kind) in
         let ptr = build_pointercast global_ptr new_ptr_kind "" builder in
         let real_ptr = build_load ptr "real_ptr" builder in
-        { value = real_ptr; kind = `Some Val }
+        { value = real_ptr; kind = Machtype Val }
       | Some (`Direct t) -> t
       | None -> raise_s [%message "Unknown global" (name : string)])
     | Cblockheader (value, _) ->
@@ -280,7 +256,7 @@ module With_context (Context : Context) = struct
       (match String.Table.find env name with
       | Some (Pointer { ptr; underlying_kind; mutability = _ }) ->
         { kind = underlying_kind; value = build_load ptr "" builder }
-      | Some (Value { kind; value }) -> { kind = `Some kind; value }
+      | Some (Value { kind; value }) -> { kind = Machtype kind; value }
       | None -> raise_s [%message "Unknown variable" (name : string)])
     | Clet (var, value, body) ->
       let var_name = Backend_var.With_provenance.name var in
@@ -290,7 +266,8 @@ module With_context (Context : Context) = struct
         ~value:
           (Value
              { value = var_value.value
-             ; kind = (match var_value.kind with `Some kind -> kind | _ -> assert false)
+             ; kind =
+                 (match var_value.kind with Machtype kind -> kind | _ -> assert false)
              })
         ~f:(fun () -> compile_expression body)
     | Clet_mut (var, machtype, value, body) ->
@@ -299,7 +276,7 @@ module With_context (Context : Context) = struct
       let var_value =
         compile_expression value
         |> promote_value_if_necessary_exn
-             ~new_machtype:(machtype_option_of_array machtype)
+             ~new_machtype:(Var.Kind.of_machtype machtype)
       in
       let var_ptr = Llvm.build_alloca (Llvm.type_of var_value.value) var_name builder in
       let previous_stack = build_call Intrinsics.stacksave [||] "" builder in
@@ -362,10 +339,10 @@ module With_context (Context : Context) = struct
       let else_value = compile_expression else_ in
       let target_kind =
         match then_value.kind, else_value.kind with
-        | `Some l, `Some r -> `Some (Cmm.lub_component l r)
-        | `Void, `Void -> `Void
-        | `No_return, other | other, `No_return -> other
-        | `Void, _ | _, `Void ->
+        | Machtype l, Machtype r -> Var.Kind.Machtype (Cmm.lub_component l r)
+        | Void, Void -> Void
+        | Never_returns, other | other, Never_returns -> other
+        | Void, _ | _, Void ->
           raise_s
             [%message
               "If expression with mis-matching branches."
@@ -447,7 +424,7 @@ module With_context (Context : Context) = struct
         let incoming = List.map incoming ~f:(fun (t, bb) -> t.value, bb) in
         position_at_end exit_bb builder;
         { value = build_phi incoming [%string "phi.%{index#Int}"] builder
-        ; kind = `Some Val
+        ; kind = Machtype Val
         })
     | Ccatch _ ->
       raise_s [%message "TODO: complex catch statements" (expr : Cmm.expression)]
@@ -491,15 +468,15 @@ module With_context (Context : Context) = struct
           List.map results ~f:(fun (t, _) -> t.kind)
           |> List.reduce_exn ~f:(fun l r ->
                  match l, r with
-                 | `Some l, `Some r -> `Some (Cmm.lub_component l r)
-                 | `Void, `Void -> `Void
-                 | `No_return, other | other, `No_return -> other
-                 | `Void, _ | _, `Void ->
+                 | Machtype l, Machtype r -> Machtype (Cmm.lub_component l r)
+                 | Void, Void -> Void
+                 | Never_returns, other | other, Never_returns -> other
+                 | Void, _ | _, Void ->
                    raise_s
                      [%message
                        "If expression with mis-matching branches."
-                         (l : [ `No_return | `Void | `Some of Cmm.machtype_component ])
-                         (r : [ `No_return | `Void | `Some of Cmm.machtype_component ])])
+                         (l : Var.Kind.t)
+                         (r : Var.Kind.t)])
         in
         let incoming = List.map results ~f:(fun (t, builder) -> t.value, builder) in
         { value = build_phi incoming "phi" builder; kind })
@@ -512,7 +489,7 @@ module With_context (Context : Context) = struct
       let args = List.map args ~f:compile_expression in
       let new_func_type =
         function_type
-          (type_of (machtype_option_of_array return_type))
+          (type_of_kind (Var.Kind.of_machtype return_type))
           (List.map args ~f:(fun arg -> Llvm.type_of arg.value) |> List.to_array)
         |> pointer_type
       in
@@ -525,12 +502,12 @@ module With_context (Context : Context) = struct
           builder
       in
       set_instruction_call_conv Declarations.ocaml_calling_convention call;
-      { value = call; kind = machtype_option_of_array return_type }
+      { value = call; kind = Var.Kind.of_machtype return_type }
     | Capply _, _ -> assert false
     | Cextcall (function_name, return_type, does_alloc, _label), args ->
       let args = List.map args ~f:compile_expression in
-      let return_kind = machtype_option_of_array return_type in
-      let return_type = type_of (machtype_option_of_array return_type) in
+      let return_kind = Var.Kind.of_machtype return_type in
+      let return_type = type_of_kind (Var.Kind.of_machtype return_type) in
       let func =
         Llvm.declare_function
           function_name
@@ -547,7 +524,7 @@ module With_context (Context : Context) = struct
         in
         let caml_c_call = Llvm.declare_function "caml_c_call" function_type this_module in
         let call = build_call caml_c_call (Array.of_list ([ func ] @ args)) "" builder in
-        set_instruction_call_conv 101 call;
+        set_instruction_call_conv Declarations.ocaml_ext_calling_convention call;
         { value = call; kind = return_kind })
       else (
         let call =
@@ -557,31 +534,31 @@ module With_context (Context : Context) = struct
             ""
             builder
         in
-        set_instruction_call_conv 100 call;
+        set_instruction_call_conv Declarations.ocaml_calling_convention call;
         { value = call; kind = return_kind })
     | Caddv, [ left; right ] ->
       let left =
         compile_expression left
-        |> promote_value_if_necessary_exn ~new_machtype:(`Some Val)
+        |> promote_value_if_necessary_exn ~new_machtype:(Machtype Val)
       in
       let right =
         compile_expression right
-        |> promote_value_if_necessary_exn ~new_machtype:(`Some Val)
+        |> promote_value_if_necessary_exn ~new_machtype:(Machtype Val)
       in
       let right = build_ptrtoint right.value int_type "" builder in
-      { kind = `Some Val; value = build_gep left.value [| right |] "" builder }
+      { kind = Machtype Val; value = build_gep left.value [| right |] "" builder }
     | Caddv, _ -> assert false
     | Cadda, [ left; right ] ->
       let left =
         compile_expression left
-        |> promote_value_if_necessary_exn ~new_machtype:(`Some Addr)
+        |> promote_value_if_necessary_exn ~new_machtype:(Machtype Addr)
       in
       let right =
         compile_expression right
-        |> promote_value_if_necessary_exn ~new_machtype:(`Some Addr)
+        |> promote_value_if_necessary_exn ~new_machtype:(Machtype Addr)
       in
       let right = build_ptrtoint right.value int_type "" builder in
-      { kind = `Some Addr; value = build_gep left.value [| right |] "" builder }
+      { kind = Machtype Addr; value = build_gep left.value [| right |] "" builder }
     | Cadda, _ -> assert false
     | ( ( Caddi | Csubi | Cmuli | Cmulhi | Cdivi | Cmodi | Cand | Cor | Cxor | Clsl | Clsr
         | Casr )
@@ -612,7 +589,7 @@ module With_context (Context : Context) = struct
             int_type
             "zext"
             builder
-      ; kind = `Some Int
+      ; kind = Machtype Int
       }
     | Ccmpi _, _ -> assert false
     | Ccmpf cmp, [ left; right ] ->
@@ -631,11 +608,11 @@ module With_context (Context : Context) = struct
       in
       let left =
         compile_expression left
-        |> promote_value_if_necessary_exn ~new_machtype:(`Some Float)
+        |> promote_value_if_necessary_exn ~new_machtype:(Machtype Float)
       in
       let right =
         compile_expression right
-        |> promote_value_if_necessary_exn ~new_machtype:(`Some Float)
+        |> promote_value_if_necessary_exn ~new_machtype:(Machtype Float)
       in
       { value =
           build_zext
@@ -643,7 +620,7 @@ module With_context (Context : Context) = struct
             int_type
             "zext"
             builder
-      ; kind = `Some Int
+      ; kind = Machtype Int
       }
     | Ccmpf _, _ -> assert false
     | Ccmpa cmp, [ left; right ] ->
@@ -658,11 +635,11 @@ module With_context (Context : Context) = struct
       in
       let left =
         compile_expression left
-        |> promote_value_if_necessary_exn ~new_machtype:(`Some Addr)
+        |> promote_value_if_necessary_exn ~new_machtype:(Machtype Addr)
       in
       let right =
         compile_expression right
-        |> promote_value_if_necessary_exn ~new_machtype:(`Some Addr)
+        |> promote_value_if_necessary_exn ~new_machtype:(Machtype Addr)
       in
       let diff = build_ptrdiff left.value right.value "diff" builder in
       { value =
@@ -671,7 +648,7 @@ module With_context (Context : Context) = struct
             int_type
             "zext"
             builder
-      ; kind = `Some Int
+      ; kind = Machtype Int
       }
     | Ccmpa _, _ -> assert false
     | (Caddf | Csubf | Cmulf | Cdivf), [ left; right ] ->
@@ -685,21 +662,23 @@ module With_context (Context : Context) = struct
     | (Cnegf | Cabsf), _ -> assert false
     | Cintoffloat, [ value ] ->
       let value = compile_expression value in
-      let value = promote_value_if_necessary_exn ~new_machtype:(`Some Float) value in
+      let value = promote_value_if_necessary_exn ~new_machtype:(Machtype Float) value in
       { value = build_bitcast value.value int_type "intoffloat" builder
-      ; kind = `Some Int
+      ; kind = Machtype Int
       }
     | Cintoffloat, _ -> assert false
     | Cfloatofint, [ value ] ->
       let value = compile_expression value in
-      let value = promote_value_if_necessary_exn ~new_machtype:(`Some Int) value in
+      let value = promote_value_if_necessary_exn ~new_machtype:(Machtype Int) value in
       { value = build_bitcast value.value float_type "floatofint" builder
-      ; kind = `Some Float
+      ; kind = Machtype Float
       }
     | Cfloatofint, _ -> assert false
     | Cload (memory_chunk, _mutability), [ src ] ->
       let ptr =
-        promote_value_if_necessary_exn ~new_machtype:(`Some Addr) (compile_expression src)
+        promote_value_if_necessary_exn
+          ~new_machtype:(Machtype Addr)
+          (compile_expression src)
       in
       let (kind : Cmm.machtype_component), mem_lltype, should_extend =
         match memory_chunk with
@@ -723,7 +702,7 @@ module With_context (Context : Context) = struct
         | `Signed -> build_sext value mem_lltype "sext" builder
         | `Float -> build_fpext value mem_lltype "fpext" builder
       in
-      { value; kind = `Some kind }
+      { value; kind = Machtype kind }
     | Cload _, _ -> assert false
     | Cstore (memory_chunk, _), [ dst; value ] ->
       let (kind : Cmm.machtype_component), mem_lltype, should_truncate =
@@ -741,7 +720,7 @@ module With_context (Context : Context) = struct
       in
       let value =
         compile_expression value
-        |> promote_value_if_necessary_exn ~new_machtype:(`Some kind)
+        |> promote_value_if_necessary_exn ~new_machtype:(Machtype kind)
       in
       let write_value =
         match should_truncate with
@@ -751,7 +730,7 @@ module With_context (Context : Context) = struct
       in
       let ptr =
         compile_expression dst
-        |> promote_value_if_necessary_exn ~new_machtype:(`Some Addr)
+        |> promote_value_if_necessary_exn ~new_machtype:(Machtype Addr)
       in
       let ptr = build_pointercast ptr.value (pointer_type mem_lltype) "" builder in
       (* eprint_s [%message "building store" (ptr : llvalue) (write_value : llvalue)]; *)
@@ -770,7 +749,8 @@ module With_context (Context : Context) = struct
           this_module
       in
       let tag_value =
-        compile_expression tag |> promote_value_if_necessary_exn ~new_machtype:(`Some Int)
+        compile_expression tag
+        |> promote_value_if_necessary_exn ~new_machtype:(Machtype Int)
       in
       let length = const_int (List.length data) in
       (* eprint_s
@@ -800,16 +780,17 @@ module With_context (Context : Context) = struct
           in
           let (_ : llvalue) = build_store value elem_ptr builder in
           ());
-      { kind = `Some Val; value = ptr }
+      { kind = Machtype Val; value = ptr }
     | Calloc, _ -> assert false
     | Ccheckbound, _ -> raise_s [%message "TODO check bounds"]
     | Craise _, [ exn ] ->
       let exn_val =
-        compile_expression exn |> promote_value_if_necessary_exn ~new_machtype:(`Some Val)
+        compile_expression exn
+        |> promote_value_if_necessary_exn ~new_machtype:(Machtype Val)
       in
       let call = build_call llambda_raise_exn [| exn_val.value |] "" builder in
       set_instruction_call_conv Declarations.ocaml_calling_convention call;
-      { kind = `No_return; value = build_unreachable builder }
+      { kind = Never_returns; value = build_unreachable builder }
       (* assert false *)
     | Craise _, _ -> assert false
   ;;

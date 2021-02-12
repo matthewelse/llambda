@@ -9,11 +9,11 @@ let type_of_function ctx (fundecl : Cmm.fundecl) =
       String.Table.set
         env
         ~key:(Backend_var.With_provenance.name name)
-        ~data:(machtype, Declarations.type_of_machtype ctx machtype));
-  let return_type = Declarations.value_type ctx in
+        ~data:(machtype, Var.Kind.lltype_of_t ~ctx (Var.Kind.of_machtype machtype)));
+  let return_type = Var.Kind.lltype_of_t ~ctx (Machtype Val) in
   let args =
     List.map fundecl.fun_args ~f:(fun (_, machtype) ->
-        Declarations.type_of_machtype ctx machtype)
+        Var.Kind.lltype_of_t ~ctx (Var.Kind.of_machtype machtype))
   in
   function_type return_type (List.to_array args)
 ;;
@@ -126,7 +126,7 @@ _llambda_push_exn_handler:
                        ~llvm_function:
                          (Llvm.lookup_function name this_module : llvalue option)]; *)
                  if String.equal name cfundecl.fun_name
-                 then Some (`Direct { Cmm_to_llvm.value = fundecl; kind = `Some Addr })
+                 then Some (`Direct { Cmm_to_llvm.value = fundecl; kind = Machtype Addr })
                  else (
                    match Llvm.lookup_global name this_module with
                    | None ->
@@ -135,18 +135,18 @@ _llambda_push_exn_handler:
                        let g =
                          build_pointercast g (pointer_type (i8_type ctx)) "" builder
                        in
-                       Some (`Direct { Cmm_to_llvm.value = g; kind = `Some Addr })
+                       Some (`Direct { Cmm_to_llvm.value = g; kind = Machtype Addr })
                      | None ->
                        let g = declare_global (i8_type ctx) name this_module in
-                       Some (`Direct { Cmm_to_llvm.value = g; kind = `Some Int }))
-                   | Some g -> Some (`Direct { Cmm_to_llvm.value = g; kind = `Some Val }))
+                       Some (`Direct { Cmm_to_llvm.value = g; kind = Machtype Int }))
+                   | Some g -> Some (`Direct { Cmm_to_llvm.value = g; kind = Machtype Val }))
                ;;
              end)
            in
            let ret_val = Cmm_to_llvm.compile_expression cfundecl.fun_body in
            build_ret
              (Cmm_to_llvm.promote_value_if_necessary_exn
-                ~new_machtype:(`Some Val)
+                ~new_machtype:(Machtype Val)
                 ret_val)
                .value
              builder
