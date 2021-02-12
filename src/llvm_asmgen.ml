@@ -27,29 +27,7 @@ type error = Assembler_error of string
 
 exception Error of error
 
-let liveness phrase =
-  Liveness.fundecl phrase;
-  phrase
-;;
-
-let dump_if ppf flag message phrase = if !flag then Printmach.phase message ppf phrase
-
-let pass_dump_if ppf flag message phrase =
-  dump_if ppf flag message phrase;
-  phrase
-;;
-
-let pass_dump_linear_if ppf flag message phrase =
-  if !flag then fprintf ppf "*** %s@.%a@." message Printlinear.fundecl phrase;
-  phrase
-;;
-
 let should_emit () = not (should_stop_after Compiler_pass.Scheduling)
-let if_emit_do f x = if should_emit () then f x else ()
-let emit_begin_assembly = if_emit_do Emit.begin_assembly
-let emit_end_assembly = if_emit_do Emit.end_assembly
-let emit_data = if_emit_do Emit.data
-let emit_fundecl = if_emit_do (Profile.record ~accumulate:true "emit" Emit.fundecl)
 let ( ++ ) x f = f x
 
 (* For the native toplevel: generates generic functions unless
@@ -136,14 +114,6 @@ let end_gen_implementation ?toplevel ~ctx ~this_module (clambda : Clambda.with_c
          in
          Emit_llvm.emit ~ctx ~this_module phrases)
 ;;
-
-type middle_end =
-  backend:(module Backend_intf.S)
-  -> filename:string
-  -> prefixname:string
-  -> ppf_dump:Format.formatter
-  -> Lambda.program
-  -> Clambda.with_constants
 
 let compile_implementation
     ?toplevel

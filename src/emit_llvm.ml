@@ -139,7 +139,8 @@ _llambda_push_exn_handler:
                      | None ->
                        let g = declare_global (i8_type ctx) name this_module in
                        Some (`Direct { Cmm_to_llvm.value = g; kind = Machtype Int }))
-                   | Some g -> Some (`Direct { Cmm_to_llvm.value = g; kind = Machtype Val }))
+                   | Some g ->
+                     Some (`Direct { Cmm_to_llvm.value = g; kind = Machtype Val }))
                ;;
              end)
            in

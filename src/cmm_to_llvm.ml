@@ -275,8 +275,7 @@ module With_context (Context : Context) = struct
       let var_name = Backend_var.With_provenance.name var in
       let var_value =
         compile_expression value
-        |> promote_value_if_necessary_exn
-             ~new_machtype:(Var.Kind.of_machtype machtype)
+        |> promote_value_if_necessary_exn ~new_machtype:(Var.Kind.of_machtype machtype)
       in
       let var_ptr = Llvm.build_alloca (Llvm.type_of var_value.value) var_name builder in
       let previous_stack = build_call Intrinsics.stacksave [||] "" builder in
