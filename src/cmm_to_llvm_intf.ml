@@ -28,7 +28,6 @@ module type Cmm_to_llvm = sig
 
   module With_context (S : Context) : sig
     val compile_expression : Cmm.expression -> t
-
     val promote_value_if_necessary_exn : new_machtype:Var.Kind.t -> t -> t
   end
 end
