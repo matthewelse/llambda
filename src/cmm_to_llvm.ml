@@ -3,24 +3,7 @@
 open! Core
 open! Import
 module Backend_var = Ocaml_optcomp.Backend_var
-
-type t =
-  { value : llvalue
-  ; kind : Var.Kind.t
-  }
-[@@deriving sexp_of]
-
-module type Context = sig
-  val ctx : llcontext
-  val builder : llbuilder
-  val this_module : llmodule
-  val this_function : llvalue
-  val env : Var.t String.Table.t
-  val catches : llbasicblock Int.Table.t
-
-  (** Lookup a global symbol. *)
-  val lookup_symbol : string -> [ `Direct of t | `Indirect of t ] option
-end
+include Cmm_to_llvm_intf
 
 module With_context (Context : Context) = struct
   open Context
@@ -31,13 +14,6 @@ module With_context (Context : Context) = struct
   let void_type = void_type ctx
 
   module Intrinsics = struct
-    let gcroot =
-      Llvm.declare_function
-        "llvm.gcroot"
-        (function_type void_type [| pointer_type val_type; val_type |])
-        this_module
-    ;;
-
     let stacksave =
       Llvm.declare_function "llvm.stacksave" (function_type val_type [||]) this_module
     ;;
@@ -47,31 +23,6 @@ module With_context (Context : Context) = struct
         "llvm.stackrestore"
         (function_type void_type [| val_type |])
         this_module
-    ;;
-
-    (* This doesn't work with allocatable registers :( *)
-    let read_register register =
-      let metadata = Llvm.mdstring ctx register in
-      let metadata = Llvm.mdnode ctx [| metadata |] in
-      let func =
-        Llvm.declare_function
-          "llvm.read_register.i64"
-          (function_type int_type [| Llvm.type_of metadata |])
-          this_module
-      in
-      Llvm.build_call func [| metadata |] "" builder
-    ;;
-
-    let write_register register value =
-      let metadata = Llvm.mdstring ctx register in
-      let metadata = Llvm.mdnode ctx [| metadata |] in
-      let func =
-        Llvm.declare_function
-          "llvm.write_register.i64"
-          (function_type void_type [| Llvm.type_of metadata; int_type |])
-          this_module
-      in
-      Llvm.build_call func [| metadata; value |] "" builder
     ;;
   end
 
@@ -188,13 +139,6 @@ module With_context (Context : Context) = struct
     let right = cast_to_int_if_necessary_exn right in
     let value = build_llvm_op left.value right.value "binop" builder in
     { value; kind = Machtype Int }
-  ;;
-
-  let require_float (t : t) =
-    match t.kind with
-    | Machtype Float | Never_returns -> ()
-    | Machtype (Val | Addr | Int) | Void ->
-      raise_s [%message "Received an float operation argument that isn't an float."]
   ;;
 
   let compile_float_binop ~(operation : Cmm.operation) left right =
@@ -391,10 +335,12 @@ module With_context (Context : Context) = struct
       let body_bb = insertion_block builder in
       let handler_bb = append_block ctx [%string "handler.%{index#Int}"] this_function in
       let exit_bb = append_block ctx [%string "exit.%{index#Int}"] this_function in
-      Int.Table.add_exn catches ~key:index ~data:handler_bb;
-      (* handler *)
-      position_at_end handler_bb builder;
-      let handler_value = compile_expression handler in
+      let handler_value =
+        with_catch_in ~index ~target:handler_bb ~f:(fun () ->
+            (* handler *)
+            position_at_end handler_bb builder;
+            compile_expression handler)
+      in
       let real_handler_bb = insertion_block builder in
       let incoming =
         match block_terminator real_handler_bb with
@@ -405,9 +351,10 @@ module With_context (Context : Context) = struct
       in
       (* body *)
       position_at_end body_bb builder;
-      let body_value = compile_expression body in
+      let body_value =
+        with_catch_in ~index ~target:handler_bb ~f:(fun () -> compile_expression body)
+      in
       let real_body_bb = insertion_block builder in
-      Int.Table.remove catches index;
       let incoming =
         match block_terminator real_body_bb with
         | None ->
