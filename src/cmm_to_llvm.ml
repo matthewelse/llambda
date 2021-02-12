@@ -85,6 +85,13 @@ module With_context (Context : Context) = struct
     ;;
   end
 
+  let llambda_raise_exn =
+    Llvm.declare_function
+      "llambda_raise_exn"
+      (function_type void_type [| val_type |])
+      this_module
+  ;;
+
   let type_of (kind : [ `Void | `No_return | `Some of Cmm.machtype_component ]) =
     match kind with
     | `Void -> void_type
@@ -746,16 +753,12 @@ module With_context (Context : Context) = struct
     | Calloc, _ -> assert false
     | Ccheckbound, _ -> raise_s [%message "TODO check bounds"]
     | Craise _, [ exn ] ->
-      let exn_val = compile_expression exn in
-      let r14_value = Intrinsics.read_register "r14" in
-      let (_ : llvalue) = Intrinsics.write_register "rsp" r14_value in
-      let r14_as_ptr = build_inttoptr r14_value (pointer_type int_type) "" builder in
-      let rsp' = build_gep r14_as_ptr [| (const_int 1).value |] "" builder in
-      let r14' = build_load r14_as_ptr "" builder in
-      let (_ : llvalue) = Intrinsics.write_register "r14" r14' in
-      let rsp' = build_ptrtoint rsp' int_type "" builder in
-      let (_ : llvalue) = Intrinsics.write_register "rsp" rsp' in
-      { kind = `No_return; value = build_ret exn_val.value builder }
+      let exn_val =
+        compile_expression exn |> promote_value_if_necessary_exn ~new_machtype:(`Some Val)
+      in
+      let call = build_call llambda_raise_exn [| exn_val.value |] "" builder in
+      set_instruction_call_conv Declarations.ocaml_calling_convention call;
+      { kind = `No_return; value = build_unreachable builder }
       (* assert false *)
     | Craise _, _ -> assert false
   ;;
