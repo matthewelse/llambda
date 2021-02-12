@@ -47,7 +47,7 @@ module With_context (Context : Context) = struct
   ;;
 
   let const_float value =
-    { value = Llvm.const_float float_type value; kind = Machtype Int }
+    { value = Llvm.const_float float_type value; kind = Machtype Float }
   ;;
 
   let with_var_in_env ~name ~value ~f =
@@ -337,7 +337,6 @@ module With_context (Context : Context) = struct
       let exit_bb = append_block ctx [%string "exit.%{index#Int}"] this_function in
       let handler_value =
         with_catch_in ~index ~target:handler_bb ~f:(fun () ->
-            (* handler *)
             position_at_end handler_bb builder;
             compile_expression handler)
       in
@@ -349,10 +348,10 @@ module With_context (Context : Context) = struct
           [ handler_value, real_handler_bb ]
         | Some _ -> []
       in
-      (* body *)
-      position_at_end body_bb builder;
       let body_value =
-        with_catch_in ~index ~target:handler_bb ~f:(fun () -> compile_expression body)
+        with_catch_in ~index ~target:handler_bb ~f:(fun () ->
+            position_at_end body_bb builder;
+            compile_expression body)
       in
       let real_body_bb = insertion_block builder in
       let incoming =

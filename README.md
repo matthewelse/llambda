@@ -46,9 +46,8 @@ through clambda or flambda to produce c--. Compile directly from c-- to LLVM.
   OCaml's), maybe use fastcc for internal things <- unfortunately, GHC's calling
   convention is wrong...
 - [ ] exception handling
-- [ ] more expressive types for llvalues - distinguish between value, addr and
-  int more cleanly.
-- [ ] handle allocations properly (GC segfaults right now)
+- [x] raise exceptions
+- [x] handle allocations properly (GC segfaults right now)
 
 ## Issues with c--
 
@@ -58,8 +57,8 @@ doesn't have enough type information for something like LLVM.
 ## LLVM changes
 
 - [x] Need to add an OCaml calling convention
-- [ ] Some way of avoiding using R15 (and R14?)
-- [ ] Use the fork of LLVM in the submodule (and the ocaml bindings via dune)
+- [x] Some way of avoiding using R15 (and R14?)
+- [x] Use the fork of LLVM in the submodule (and the ocaml bindings via dune)
 
 ## Building LLVM & OCaml bindings
 
