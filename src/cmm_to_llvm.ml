@@ -451,7 +451,54 @@ module With_context (Context : Context) = struct
       let (_ : llvalue) = build_br (Int.Table.find_exn catches index) builder in
       const_int 1
     | Cexit _ -> raise_s [%message "TODO: complex exits" (expr : Cmm.expression)]
-    | Cswitch _ -> raise_s [%message "TODO: switch statements" (expr : Cmm.expression)]
+    | Cswitch (value, ints, expressions, _) ->
+      let match_value = compile_expression value |> cast_to_int_if_necessary_exn in
+      let default =
+        let bb = Llvm.append_block ctx "default" this_function in
+        position_at_end bb builder;
+        let (_ : llvalue) = build_unreachable builder in
+        bb
+      in
+      let switch =
+        build_switch match_value.value default (Array.length expressions) builder
+      in
+      let exit_bb = append_block ctx "exit" this_function in
+      let results =
+        Array.map2_exn ints expressions ~f:(fun case (then_, _) ->
+            let bb = Llvm.append_block ctx [%string "case%{case#Int}"] this_function in
+            position_at_end bb builder;
+            let result = compile_expression then_ in
+            add_case switch (const_int case).value bb;
+            let real_bb = insertion_block builder in
+            match block_terminator real_bb with
+            | None ->
+              let (_ : llvalue) = build_br exit_bb builder in
+              Some (result, real_bb)
+            | Some _ -> None)
+        |> Array.to_list
+        |> List.filter_opt
+      in
+      (match results with
+      | [] ->
+        remove_block exit_bb;
+        const_int 1
+      | results ->
+        let kind =
+          List.map results ~f:(fun (t, _) -> t.kind)
+          |> List.reduce_exn ~f:(fun l r ->
+                 match l, r with
+                 | `Some l, `Some r -> `Some (Cmm.lub_component l r)
+                 | `Void, `Void -> `Void
+                 | `No_return, other | other, `No_return -> other
+                 | `Void, _ | _, `Void ->
+                   raise_s
+                     [%message
+                       "If expression with mis-matching branches."
+                         (l : [ `No_return | `Void | `Some of Cmm.machtype_component ])
+                         (r : [ `No_return | `Void | `Some of Cmm.machtype_component ])])
+        in
+        let incoming = List.map results ~f:(fun (t, builder) -> t.value, builder) in
+        { value = build_phi incoming "phi" builder; kind })
     | Ctrywith _ -> raise_s [%message "TODO: try/with" (expr : Cmm.expression)]
 
   and compile_operation operation args (_ : Ocaml_common.Debuginfo.t) =
