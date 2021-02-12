@@ -5,18 +5,18 @@ open! Import
 module Backend_var = Ocaml_optcomp.Backend_var
 
 type t =
-  { value : Ir_value.t
+  { value : llvalue
   ; kind : [ `Void | `No_return | `Some of Cmm.machtype_component ]
   }
 [@@deriving sexp_of]
 
 module type Context = sig
-  val ctx : Ir_context.t
-  val builder : Ir_builder.t
-  val this_module : Ir_module.t
-  val this_function : Ir_value.t
+  val ctx : llcontext
+  val builder : llbuilder
+  val this_module : llmodule
+  val this_function : llvalue
   val env : Var.t String.Table.t
-  val catches : Ir_basic_block.t Int.Table.t
+  val catches : llbasicblock Int.Table.t
 
   (** Lookup a global symbol. *)
   val lookup_symbol : string -> [ `Direct of t | `Indirect of t ] option
@@ -303,7 +303,7 @@ module With_context (Context : Context) = struct
       in
       let var_ptr = Llvm.build_alloca (Llvm.type_of var_value.value) var_name builder in
       let previous_stack = build_call Intrinsics.stacksave [||] "" builder in
-      let (_ : Ir_value.t) = build_store var_value.value var_ptr builder in
+      let (_ : llvalue) = build_store var_value.value var_ptr builder in
       let result =
         with_var_in_env
           ~name:var_name
@@ -543,7 +543,7 @@ module With_context (Context : Context) = struct
       then (
         let args = [ func ] @ List.map args ~f:(fun arg -> arg.value) in
         let function_type =
-          Ir_type.function_type ~arg_types:(List.map args ~f:Llvm.type_of) ~return_type
+          function_type return_type (List.map args ~f:Llvm.type_of |> Array.of_list)
         in
         let caml_c_call = Llvm.declare_function "caml_c_call" function_type this_module in
         let call = build_call caml_c_call (Array.of_list ([ func ] @ args)) "" builder in
@@ -754,7 +754,7 @@ module With_context (Context : Context) = struct
         |> promote_value_if_necessary_exn ~new_machtype:(`Some Addr)
       in
       let ptr = build_pointercast ptr.value (pointer_type mem_lltype) "" builder in
-      (* eprint_s [%message "building store" (ptr : Ir_value.t) (write_value : Ir_value.t)]; *)
+      (* eprint_s [%message "building store" (ptr : llvalue) (write_value : llvalue)]; *)
       let (_ : llvalue) = build_store write_value ptr builder in
       const_int 1
     | Cstore _, _ -> assert false
@@ -774,7 +774,7 @@ module With_context (Context : Context) = struct
       in
       let length = const_int (List.length data) in
       (* eprint_s
-        [%message "building call" (caml_alloc : Ir_value.t) (length : t) (tag_value : t)]; *)
+        [%message "building call" (caml_alloc : llvalue) (length : t) (tag_value : t)]; *)
       (* LLVM is sad if we try to put the allocated pointer on the stack
 
         TODO melse: we probably need to introduce a new kind, which is a pointer

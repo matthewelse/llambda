@@ -3,12 +3,12 @@ open! Import
 
 type t =
   | Pointer of
-      { ptr : Ir_value.t
+      { ptr : llvalue
       ; underlying_kind : [ `Void | `No_return | `Some of Cmm.machtype_component ]
       ; mutability : [ `Mutable | `Immutable ]
       }
   | Value of
-      { value : Ir_value.t
+      { value : llvalue
       ; kind : Cmm.machtype_component
       }
 [@@deriving sexp_of]

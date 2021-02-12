@@ -1,5 +1,0 @@
-(library
- (name wrap_llvm)
- (libraries core llvm)
- (preprocess
-  (pps ppx_jane)))

@@ -2,7 +2,6 @@ open Core
 module B = Backend_intf
 include Ocaml_shadow
 include Llvm
-include Wrap_llvm
 module Backend_intf = B
 
 module Cmm = struct
@@ -39,3 +38,7 @@ module Cmm = struct
 end
 
 module Cmmgen = Ocaml_optcomp.Cmmgen
+
+let sexp_of_llvalue llvalue : Sexp.t = Atom (string_of_llvalue llvalue)
+let sexp_of_lltype lltype : Sexp.t = Atom (string_of_lltype lltype)
+let sexp_of_llcontext (_ : llcontext) : Sexp.t = [%sexp `llcontext]

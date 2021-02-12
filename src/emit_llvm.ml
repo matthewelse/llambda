@@ -37,16 +37,16 @@ let value_of_data_item (data_item : Cmm.data_item) =
 ;;
 
 let emit ~ctx ~this_module (cmm : Cmm.phrase list) =
-  let builder = Ir_builder.create ctx in
+  let builder = builder ctx in
   let env = String.Table.create () in
   (* Pre-define functions and globals to avoid issues with ordering. *)
   List.iter cmm ~f:(function
       | Cfunction cfundecl ->
         (* print_s [%message "declaring function" cfundecl.fun_name]; *)
-        Ir_module.declare_function'
-          this_module
-          ~name:cfundecl.fun_name
-          ~funtype:(type_of_function ctx cfundecl)
+        let (_ : llvalue) =
+          declare_function cfundecl.fun_name (type_of_function ctx cfundecl) this_module
+        in
+        ()
       | Cdata _ -> ());
   let globals =
     List.concat_map cmm ~f:(function
@@ -79,7 +79,7 @@ _llambda_push_exn_handler:
   List.iter cmm ~f:(function
       | Cfunction cfundecl ->
         (* print_s [%message "compiling function" (cfundecl.fun_name : string)]; *)
-        let fundecl = Ir_module.lookup_function_exn this_module ~name:cfundecl.fun_name in
+        let fundecl = lookup_function cfundecl.fun_name this_module |> Option.value_exn in
         set_function_call_conv Declarations.ocaml_calling_convention fundecl;
         set_gc (Some "ocaml") fundecl;
         (* set argument names *)
@@ -122,9 +122,9 @@ _llambda_push_exn_handler:
                      "lookup symbol"
                        (name : string)
                        ~llvm_global:
-                         (Llvm.lookup_global name this_module : Ir_value.t option)
+                         (Llvm.lookup_global name this_module : llvalue option)
                        ~llvm_function:
-                         (Llvm.lookup_function name this_module : Ir_value.t option)]; *)
+                         (Llvm.lookup_function name this_module : llvalue option)]; *)
                  if String.equal name cfundecl.fun_name
                  then Some (`Direct { Cmm_to_llvm.value = fundecl; kind = `Some Addr })
                  else (
@@ -164,15 +164,4 @@ _llambda_push_exn_handler:
           delete_function fundecl;
           raise_s msg)
       | Cdata _ -> ())
-;;
-
-let emit_llvm phrases =
-  let ctx = Llvm.global_context () in
-  Ir_module.with_module
-    ~target_triple:"x86_64-apple-darwin19.6.0"
-    ~ctx
-    "melse"
-    (fun this_module ->
-      emit ~this_module ~ctx phrases;
-      string_of_llmodule this_module |> print_endline)
 ;;

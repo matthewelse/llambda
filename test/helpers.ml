@@ -25,13 +25,15 @@ let runtest structure =
       in
       let cmm = Ocaml_optcomp.Cmmgen.compunit clambda in
       let ctx = Llvm.create_context () in
-      Wrap_llvm.Ir_module.with_module ~ctx "test" (fun this_module ->
-          Llambda.Emit_llvm.emit ~ctx ~this_module cmm;
-          Llvm.iter_functions
-            (fun func ->
-              let name = Llvm.value_name func in
-              if String.is_prefix name ~prefix:"camlTest__f"
-              then Llvm.string_of_llvalue func |> print_endline)
-            this_module);
+      let this_module = Llvm.create_module ctx (Ident.name lambda.module_ident) in
+      Llvm.set_target_triple "x86_64-apple-macosx10.15.0" this_module;
+      Llambda.Emit_llvm.emit ~ctx ~this_module cmm;
+      Llvm.iter_functions
+        (fun func ->
+          let name = Llvm.value_name func in
+          if String.is_prefix name ~prefix:"camlTest__f"
+          then Llvm.string_of_llvalue func |> print_endline)
+        this_module;
+      Llvm.dispose_module this_module;
       Llvm.dispose_context ctx)
 ;;

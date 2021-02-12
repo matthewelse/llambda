@@ -157,22 +157,20 @@ let compile_implementation
   =
   let irfile = Ident.name program.module_ident ^ ".ll" in
   let ctx = Llvm.global_context () in
-  Wrap_llvm.Ir_module.with_module
-    ~target_triple:"x86_64-apple-macosx10.15.0"
-    ~ctx
-    (Ident.name program.module_ident)
-    (fun impl_module ->
-      compile_unit ~llvm_flags irfile !keep_asm_file (prefixname ^ ext_obj) (fun () ->
-          Ident.Set.iter Compilenv.require_global program.required_globals;
-          let clambda_with_constants =
-            middle_end ~backend ~filename ~prefixname ~ppf_dump program
-          in
-          end_gen_implementation
-            ?toplevel
-            ~this_module:impl_module
-            ~ctx
-            clambda_with_constants;
-          Emitaux.emit_string (Llvm.string_of_llmodule impl_module)))
+  let impl_module = Llvm.create_module ctx (Ident.name program.module_ident) in
+  Llvm.set_target_triple "x86_64-apple-macosx10.15.0" impl_module;
+  compile_unit ~llvm_flags irfile !keep_asm_file (prefixname ^ ext_obj) (fun () ->
+      Ident.Set.iter Compilenv.require_global program.required_globals;
+      let clambda_with_constants =
+        middle_end ~backend ~filename ~prefixname ~ppf_dump program
+      in
+      end_gen_implementation
+        ?toplevel
+        ~this_module:impl_module
+        ~ctx
+        clambda_with_constants;
+      Emitaux.emit_string (Llvm.string_of_llmodule impl_module));
+  Llvm.dispose_module impl_module
 ;;
 
 (* Error report *)
