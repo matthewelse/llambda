@@ -103,6 +103,10 @@ module With_context (Context : Context) = struct
 
   let const_int value = { value = Llvm.const_int int_type value; kind = `Some Int }
 
+  let const_int64 ?(signed = true) value =
+    { value = Llvm.const_of_int64 int_type value signed; kind = `Some Int }
+  ;;
+
   let const_pointer value =
     { value = Llvm.const_inttoptr (Llvm.const_int int_type value) val_type
     ; kind = `Some Val
@@ -255,7 +259,7 @@ module With_context (Context : Context) = struct
     (* Core.eprint_s [%message "compiling expression" (expr : Cmm.expression)]; *)
     match expr with
     | Cconst_int (value, _) -> const_int value
-    | Cconst_natint (value, _) -> const_int (Nativeint.to_int_exn value)
+    | Cconst_natint (value, _) -> const_int64 (Nativeint.to_int64 value)
     | Cconst_float (value, _) -> const_float value
     | Cconst_pointer (value, _) -> const_pointer value
     | Cconst_natpointer (value, _) -> const_pointer (Nativeint.to_int_exn value)
@@ -270,7 +274,7 @@ module With_context (Context : Context) = struct
       | None -> raise_s [%message "Unknown global" (name : string)])
     | Cblockheader (value, _) ->
       (* I think this is right - chances are we'll write it down somewhere. *)
-      const_int (Nativeint.to_int_exn value)
+      const_int64 ~signed:false (Nativeint.to_int64 value)
     | Cvar name ->
       let name = Backend_var.name name in
       (match String.Table.find env name with

@@ -1,6 +1,6 @@
 (library
  (name llambda_test)
- (libraries core llambda)
+ (libraries core llambda ppxlib)
  (inline_tests)
  (preprocess
-  (pps ppx_jane ppx_inline_test)))
+  (pps ppx_jane ppx_inline_test ppxlib.metaquot)))
