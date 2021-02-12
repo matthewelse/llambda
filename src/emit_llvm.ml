@@ -54,14 +54,19 @@ let emit ~ctx ~this_module (cmm : Cmm.phrase list) =
         | Cdata items -> ".data" :: List.map items ~f:value_of_data_item)
     |> String.concat ~sep:"\n"
   in
-  let helpers = {|
+  let helpers =
+    {|
 .text
 _llambda_raise_exn:
   movq 16(%r14),%rsp
   popq 16(%r14)
   popq %r11
   jmp *%r11
-  |} in
+.text
+_llambda_push_exn_handler:
+  jmp _llambda_push_exn_handler
+  |}
+  in
   List.iter cmm ~f:(function
       | Cfunction _ -> ()
       | Cdata items ->
