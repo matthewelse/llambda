@@ -65,7 +65,6 @@ module Optcompile = struct
   ;;
 
   let flambda ~llvm_flags i backend typed =
-    Clflags.use_inlining_arguments_set Clflags.classic_arguments;
     typed
     |> Profile.(record transl) (Translmod.transl_implementation_flambda i.module_name)
     |> print_if i.ppf_dump Clflags.dump_rawlambda Printlambda.program

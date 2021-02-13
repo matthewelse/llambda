@@ -50,8 +50,9 @@ let emit ~ctx ~this_module (cmm : Cmm.phrase list) =
   List.iter cmm ~f:(function
       | Cfunction cfundecl ->
         (* print_s [%message "declaring function" cfundecl.fun_name]; *)
+        let name = mangle_symbol_name '$' cfundecl.fun_name in
         let (_ : llvalue) =
-          declare_function cfundecl.fun_name (type_of_function ctx cfundecl) this_module
+          declare_function name (type_of_function ctx cfundecl) this_module
         in
         ()
       | Cdata _ -> ());
@@ -86,7 +87,8 @@ _llambda_push_exn_handler:
   List.iter cmm ~f:(function
       | Cfunction cfundecl ->
         (* print_s [%message "compiling function" (cfundecl.fun_name : string)]; *)
-        let fundecl = lookup_function cfundecl.fun_name this_module |> Option.value_exn in
+        let name = mangle_symbol_name '$' cfundecl.fun_name in
+        let fundecl = lookup_function name this_module |> Option.value_exn in
         set_function_call_conv Declarations.ocaml_calling_convention fundecl;
         set_gc (Some "ocaml") fundecl;
         (* set argument names *)
