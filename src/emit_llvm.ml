@@ -18,10 +18,17 @@ let type_of_function ctx (fundecl : Cmm.fundecl) =
   function_type return_type (List.to_array args)
 ;;
 
+let mangle_symbol_name esc s =
+  String.concat_map s ~f:(function
+      | ('A' .. 'Z' | 'a' .. 'z' | '0' .. '9' | '_') as c -> Char.to_string c
+      | c -> sprintf "%c%02x" esc (Char.to_int c))
+;;
+
 let value_of_data_item (data_item : Cmm.data_item) =
+  (* TODO melse: mangle name for global and define symbols *)
   match data_item with
-  | Cdefine_symbol name -> "_" ^ name ^ ":"
-  | Cglobal_symbol name -> ".globl _" ^ name
+  | Cdefine_symbol name -> "_" ^ mangle_symbol_name '$' name ^ ":"
+  | Cglobal_symbol name -> ".globl _" ^ mangle_symbol_name '$' name
   | Cint8 value -> sprintf ".byte %d" value
   | Cint16 value -> sprintf ".word %d" value
   | Cint32 value -> sprintf !".long %{Nativeint}" value
@@ -31,7 +38,7 @@ let value_of_data_item (data_item : Cmm.data_item) =
     sprintf !".quad %{Int64}" int
   | Csingle _ -> assert false
   | Cstring literal -> sprintf !".ascii \"%s\"" literal
-  | Csymbol_address name -> sprintf !".quad _%s" name
+  | Csymbol_address name -> sprintf !".quad _%s" (mangle_symbol_name '$' name)
   | Calign n -> sprintf !".align %d" n
   | Cskip n -> sprintf !".space %d" n
 ;;
@@ -128,6 +135,7 @@ _llambda_push_exn_handler:
                  if String.equal name cfundecl.fun_name
                  then Some (`Direct { Cmm_to_llvm.value = fundecl; kind = Machtype Addr })
                  else (
+                   let name = mangle_symbol_name '$' name in
                    match Llvm.lookup_global name this_module with
                    | None ->
                      (match Llvm.lookup_function name this_module with
