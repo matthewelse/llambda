@@ -80,3 +80,13 @@ cd external/llvm
 dune build
 ```
 
+## Potential optimisations
+
+- If we can tag variables as being integers (in 2n+1) form, we can have a custom
+  pass based on instcombine that assumes taht the value begins with an |1
+  operation.
+- More accurate types for global variables (i.e. not i8*)
+- Fewer `inttoptr`s, since they just make other optimisations harder. Emit GEPs
+  for addi when the first element is an LLVM pointer type (I think if we ever do
+  multiplications etc. we know that it's an integer anyway). <- maybe?
+- Try with flambda
