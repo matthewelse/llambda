@@ -18,22 +18,38 @@ end
 
 let backend = (module Backend : Backend_intf.S)
 let loc = Location.none
+let middle_end = if Ocaml_common.Config.flambda then `Flambda else `Lambda
 
 let runtest ?(show_functions = [ "f" ]) structure =
+  (match middle_end with
+  | `Flambda -> ()
+  | `Lambda ->
+    eprint_s
+      [%message "Compiling without flambda may lead to unexpected changes to LLVM IR."]);
   Ocaml_common.Warnings.without_warnings (fun () ->
       Clflags.native_code := true;
-      Ocaml_optcomp.Compilenv.reset "Test";
+      Clflags.opaque := true;
+      Compilenv.reset ?packname:!Clflags.for_package "Test";
       Ocaml_common.Compmisc.init_path ();
       Ocaml_common.Env.set_unit_name "test";
       let env = Ocaml_common.Compmisc.initial_env () in
       let typed, _, _, _ = Ocaml_common.Typemod.type_structure env structure loc in
       let transl =
-        Ocaml_common.Translmod.transl_store_implementation "test" (typed, Tcoerce_none)
+        match middle_end with
+        | `Flambda ->
+          Ocaml_common.Translmod.transl_implementation_flambda "test" (typed, Tcoerce_none)
+        | `Lambda ->
+          Ocaml_common.Translmod.transl_store_implementation "test" (typed, Tcoerce_none)
       in
       let code = Ocaml_common.Simplif.simplify_lambda transl.code in
       let lambda = { transl with code } in
+      let middle_end =
+        match middle_end with
+        | `Flambda -> Ocaml_optcomp.Flambda_middle_end.lambda_to_clambda
+        | `Lambda -> Ocaml_optcomp.Closure_middle_end.lambda_to_clambda
+      in
       let clambda =
-        Ocaml_optcomp.Closure_middle_end.lambda_to_clambda
+        middle_end
           ~backend
           ~filename:"test.ml"
           ~prefixname:"test"
@@ -48,9 +64,18 @@ let runtest ?(show_functions = [ "f" ]) structure =
       Llvm.iter_functions
         (fun func ->
           let name = Llvm.value_name func in
-          if List.exists show_functions ~f:(fun funcname ->
-                 String.is_prefix name ~prefix:("camlTest__" ^ funcname))
-          then Llvm.string_of_llvalue func |> print_endline)
+          match
+            List.find show_functions ~f:(fun funcname ->
+                String.is_prefix name ~prefix:("camlTest__" ^ funcname))
+          with
+          | Some function_name ->
+            let name_re =
+              Re.Perl.compile_pat ("camlTest__" ^ function_name ^ "_[0-9]+")
+            in
+            Llvm.string_of_llvalue func
+            |> Re.replace_string name_re ~by:("camlTest__" ^ function_name ^ "_XXX")
+            |> print_endline
+          | None -> ())
         this_module;
       Llvm.dispose_module this_module;
       Llvm.dispose_context ctx)

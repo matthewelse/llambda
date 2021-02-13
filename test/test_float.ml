@@ -6,7 +6,7 @@ let%expect_test "addition" =
   runtest [%str let f x = x +. 10.0];
   [%expect
     {|
-    define ocamlcc i8* @camlTest__f_80(i8* %x) gc "ocaml" {
+    define ocamlcc i8* @camlTest__f_XXX(i8* %x) gc "ocaml" {
     entry:
       %alloc = call i8* @caml_alloc(i64 1, i64 1277)
       %gep = getelementptr inbounds i8, i8* %alloc, i64 0
@@ -23,7 +23,7 @@ let%expect_test "subtraction of constant" =
   runtest [%str let f x = x -. 10.0];
   [%expect
     {|
-    define ocamlcc i8* @camlTest__f_80(i8* %x) gc "ocaml" {
+    define ocamlcc i8* @camlTest__f_XXX(i8* %x) gc "ocaml" {
     entry:
       %alloc = call i8* @caml_alloc(i64 1, i64 1277)
       %gep = getelementptr inbounds i8, i8* %alloc, i64 0
@@ -40,7 +40,7 @@ let%expect_test "subtraction by variable" =
   runtest [%str let f x y = x -. y];
   [%expect
     {|
-    define ocamlcc i8* @camlTest__f_80(i8* %x, i8* %y) gc "ocaml" {
+    define ocamlcc i8* @camlTest__f_XXX(i8* %x, i8* %y) gc "ocaml" {
     entry:
       %alloc = call i8* @caml_alloc(i64 1, i64 1277)
       %gep = getelementptr inbounds i8, i8* %alloc, i64 0
@@ -59,7 +59,7 @@ let%expect_test "multiplication" =
   runtest [%str let f x = x *. 10.0];
   [%expect
     {|
-    define ocamlcc i8* @camlTest__f_80(i8* %x) gc "ocaml" {
+    define ocamlcc i8* @camlTest__f_XXX(i8* %x) gc "ocaml" {
     entry:
       %alloc = call i8* @caml_alloc(i64 1, i64 1277)
       %gep = getelementptr inbounds i8, i8* %alloc, i64 0
@@ -76,7 +76,7 @@ let%expect_test "division by constant" =
   runtest [%str let f x = x /. 10.0];
   [%expect
     {|
-    define ocamlcc i8* @camlTest__f_80(i8* %x) gc "ocaml" {
+    define ocamlcc i8* @camlTest__f_XXX(i8* %x) gc "ocaml" {
     entry:
       %alloc = call i8* @caml_alloc(i64 1, i64 1277)
       %gep = getelementptr inbounds i8, i8* %alloc, i64 0
@@ -93,7 +93,7 @@ let%expect_test "division by variable" =
   runtest [%str let f x y = x /. y];
   [%expect
     {|
-    define ocamlcc i8* @camlTest__f_80(i8* %x, i8* %y) gc "ocaml" {
+    define ocamlcc i8* @camlTest__f_XXX(i8* %x, i8* %y) gc "ocaml" {
     entry:
       %alloc = call i8* @caml_alloc(i64 1, i64 1277)
       %gep = getelementptr inbounds i8, i8* %alloc, i64 0
@@ -112,7 +112,7 @@ let%expect_test "fp comparison: eq" =
   runtest [%str let f x = x = 4.0];
   [%expect
     {|
-    define ocamlcc i8* @camlTest__f_80(i8* %x) gc "ocaml" {
+    define ocamlcc i8* @camlTest__f_XXX(i8* %x) gc "ocaml" {
     entry:
       %load = bitcast i8* %x to double*
       %0 = load double, double* %load, align 8
@@ -129,7 +129,7 @@ let%expect_test "fp comparison: neq" =
   runtest [%str let f x = x <> 4.0];
   [%expect
     {|
-    define ocamlcc i8* @camlTest__f_80(i8* %x) gc "ocaml" {
+    define ocamlcc i8* @camlTest__f_XXX(i8* %x) gc "ocaml" {
     entry:
       %load = bitcast i8* %x to double*
       %0 = load double, double* %load, align 8

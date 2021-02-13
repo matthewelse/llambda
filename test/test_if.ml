@@ -6,7 +6,7 @@ let%expect_test "if statement" =
   runtest [%str let f x = if x > 10 then print_endline "Hello, world"];
   [%expect
     {|
-    define ocamlcc i8* @camlTest__f_80(i8* %x) gc "ocaml" {
+    define ocamlcc i8* @camlTest__f_XXX(i8* %x) gc "ocaml" {
     entry:
       %0 = ptrtoint i8* %x to i64
       %icmp = icmp sgt i64 %0, 21
@@ -15,7 +15,7 @@ let%expect_test "if statement" =
       br i1 %1, label %then, label %else
 
     then:                                             ; preds = %entry
-      %2 = call ocamlcc i8* bitcast (i8* @camlStdlib__print_endline_361 to i8* (i8*)*)(i8* @camlTest__21)
+      %2 = call ocamlcc i8* bitcast (i8* @camlStdlib__print_endline_1181 to i8* (i8*)*)(i8* @camlTest__const_immstring_473)
       br label %merge
 
     else:                                             ; preds = %entry
@@ -31,7 +31,7 @@ let%expect_test "if/else" =
   runtest [%str let f x = if x > 10 then `Hello else `World];
   [%expect
     {|
-    define ocamlcc i8* @camlTest__f_80(i8* %x) gc "ocaml" {
+    define ocamlcc i8* @camlTest__f_XXX(i8* %x) gc "ocaml" {
     entry:
       %0 = ptrtoint i8* %x to i64
       %icmp = icmp sgt i64 %0, 21
@@ -88,14 +88,14 @@ let%expect_test "match" =
   *)
   [%expect
     {|
-    define ocamlcc i8* @camlTest__f_89(i8* %x) gc "ocaml" {
+    define ocamlcc i8* @camlTest__f_XXX(i8* %x) gc "ocaml" {
     entry:
       %0 = ptrtoint i8* %x to i64
       %binop = or i64 %0, 1
       %binop1 = shl i64 %binop, 2
       %promote = inttoptr i64 %binop1 to i8*
       %1 = ptrtoint i8* %promote to i64
-      %2 = getelementptr i8, i8* @camlTest__33, i64 %1
+      %2 = getelementptr i8, i8* @camlTest__1, i64 %1
       %3 = getelementptr i8, i8* %2, i64 -4
       %load = bitcast i8* %3 to i8**
       %4 = load i8*, i8** %load, align 8
@@ -114,7 +114,7 @@ let%expect_test "match+" =
       ;;];
   [%expect
     {|
-    define ocamlcc i8* @camlTest__f_80(i8* %x, i8* %y) gc "ocaml" {
+    define ocamlcc i8* @camlTest__f_XXX(i8* %x, i8* %y) gc "ocaml" {
     entry:
       %0 = ptrtoint i8* %x to i64
       %icmp = icmp sge i64 %0, 1876772325
@@ -139,11 +139,11 @@ let%expect_test "match+" =
       br label %merge
 
     merge:                                            ; preds = %else4, %then3
-      %iftmp = phi i8* [ @camlTest__36, %else4 ], [ @camlTest__35, %then3 ]
+      %iftmp = phi i8* [ @camlTest__const_immstring_584, %else4 ], [ @camlTest__const_immstring_586, %then3 ]
       br label %merge5
 
     merge5:                                           ; preds = %merge, %then
-      %iftmp6 = phi i8* [ %iftmp, %merge ], [ @camlTest__34, %then ]
+      %iftmp6 = phi i8* [ %iftmp, %merge ], [ @camlTest__const_immstring_588, %then ]
       ret i8* %iftmp6
     } |}]
 ;;
