@@ -19,7 +19,7 @@ end
 let backend = (module Backend : Backend_intf.S)
 let loc = Location.none
 
-let runtest structure =
+let runtest ?(show_functions = [ "f" ]) structure =
   Ocaml_common.Warnings.without_warnings (fun () ->
       Clflags.native_code := true;
       Ocaml_optcomp.Compilenv.reset "Test";
@@ -48,7 +48,8 @@ let runtest structure =
       Llvm.iter_functions
         (fun func ->
           let name = Llvm.value_name func in
-          if String.is_prefix name ~prefix:"camlTest__f"
+          if List.exists show_functions ~f:(fun funcname ->
+                 String.is_prefix name ~prefix:("camlTest__" ^ funcname))
           then Llvm.string_of_llvalue func |> print_endline)
         this_module;
       Llvm.dispose_module this_module;
