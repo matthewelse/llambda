@@ -8,14 +8,20 @@ let%expect_test "addition" =
     {|
     define ocamlcc i8* @camlTest__f_XXX(i8* %x) gc "ocaml" {
     entry:
+      %alloc_ptr = alloca i8*, align 8
       %alloc = call i8* @caml_alloc(i64 1, i64 1277)
-      %gep = getelementptr inbounds i8, i8* %alloc, i64 0
+      store i8* %alloc, i8** %alloc_ptr, align 8
+      call void @llvm.gcroot(i8** %alloc_ptr, i8* null)
+      %alloc1 = call i8* @caml_alloc(i64 1, i64 1277)
+      store i8* %alloc1, i8** %alloc_ptr, align 8
+      %gep = getelementptr inbounds i8, i8* %alloc1, i64 0
       %load = bitcast i8* %x to double*
       %0 = load double, double* %load, align 8
       %binop = fadd double %0, 1.000000e+01
       %1 = bitcast i8* %gep to double*
       store double %binop, double* %1, align 8
-      ret i8* %alloc
+      %2 = load i8*, i8** %alloc_ptr, align 8
+      ret i8* %2
     } |}]
 ;;
 
@@ -25,14 +31,20 @@ let%expect_test "subtraction of constant" =
     {|
     define ocamlcc i8* @camlTest__f_XXX(i8* %x) gc "ocaml" {
     entry:
+      %alloc_ptr = alloca i8*, align 8
       %alloc = call i8* @caml_alloc(i64 1, i64 1277)
-      %gep = getelementptr inbounds i8, i8* %alloc, i64 0
+      store i8* %alloc, i8** %alloc_ptr, align 8
+      call void @llvm.gcroot(i8** %alloc_ptr, i8* null)
+      %alloc1 = call i8* @caml_alloc(i64 1, i64 1277)
+      store i8* %alloc1, i8** %alloc_ptr, align 8
+      %gep = getelementptr inbounds i8, i8* %alloc1, i64 0
       %load = bitcast i8* %x to double*
       %0 = load double, double* %load, align 8
       %binop = fsub double %0, 1.000000e+01
       %1 = bitcast i8* %gep to double*
       store double %binop, double* %1, align 8
-      ret i8* %alloc
+      %2 = load i8*, i8** %alloc_ptr, align 8
+      ret i8* %2
     } |}]
 ;;
 
@@ -42,16 +54,22 @@ let%expect_test "subtraction by variable" =
     {|
     define ocamlcc i8* @camlTest__f_XXX(i8* %x, i8* %y) gc "ocaml" {
     entry:
+      %alloc_ptr = alloca i8*, align 8
       %alloc = call i8* @caml_alloc(i64 1, i64 1277)
-      %gep = getelementptr inbounds i8, i8* %alloc, i64 0
+      store i8* %alloc, i8** %alloc_ptr, align 8
+      call void @llvm.gcroot(i8** %alloc_ptr, i8* null)
+      %alloc1 = call i8* @caml_alloc(i64 1, i64 1277)
+      store i8* %alloc1, i8** %alloc_ptr, align 8
+      %gep = getelementptr inbounds i8, i8* %alloc1, i64 0
       %load = bitcast i8* %x to double*
       %0 = load double, double* %load, align 8
-      %load1 = bitcast i8* %y to double*
-      %1 = load double, double* %load1, align 8
+      %load2 = bitcast i8* %y to double*
+      %1 = load double, double* %load2, align 8
       %binop = fsub double %0, %1
       %2 = bitcast i8* %gep to double*
       store double %binop, double* %2, align 8
-      ret i8* %alloc
+      %3 = load i8*, i8** %alloc_ptr, align 8
+      ret i8* %3
     } |}]
 ;;
 
@@ -61,14 +79,20 @@ let%expect_test "multiplication" =
     {|
     define ocamlcc i8* @camlTest__f_XXX(i8* %x) gc "ocaml" {
     entry:
+      %alloc_ptr = alloca i8*, align 8
       %alloc = call i8* @caml_alloc(i64 1, i64 1277)
-      %gep = getelementptr inbounds i8, i8* %alloc, i64 0
+      store i8* %alloc, i8** %alloc_ptr, align 8
+      call void @llvm.gcroot(i8** %alloc_ptr, i8* null)
+      %alloc1 = call i8* @caml_alloc(i64 1, i64 1277)
+      store i8* %alloc1, i8** %alloc_ptr, align 8
+      %gep = getelementptr inbounds i8, i8* %alloc1, i64 0
       %load = bitcast i8* %x to double*
       %0 = load double, double* %load, align 8
       %binop = fmul double %0, 1.000000e+01
       %1 = bitcast i8* %gep to double*
       store double %binop, double* %1, align 8
-      ret i8* %alloc
+      %2 = load i8*, i8** %alloc_ptr, align 8
+      ret i8* %2
     } |}]
 ;;
 
@@ -78,14 +102,20 @@ let%expect_test "division by constant" =
     {|
     define ocamlcc i8* @camlTest__f_XXX(i8* %x) gc "ocaml" {
     entry:
+      %alloc_ptr = alloca i8*, align 8
       %alloc = call i8* @caml_alloc(i64 1, i64 1277)
-      %gep = getelementptr inbounds i8, i8* %alloc, i64 0
+      store i8* %alloc, i8** %alloc_ptr, align 8
+      call void @llvm.gcroot(i8** %alloc_ptr, i8* null)
+      %alloc1 = call i8* @caml_alloc(i64 1, i64 1277)
+      store i8* %alloc1, i8** %alloc_ptr, align 8
+      %gep = getelementptr inbounds i8, i8* %alloc1, i64 0
       %load = bitcast i8* %x to double*
       %0 = load double, double* %load, align 8
       %binop = fdiv double %0, 1.000000e+01
       %1 = bitcast i8* %gep to double*
       store double %binop, double* %1, align 8
-      ret i8* %alloc
+      %2 = load i8*, i8** %alloc_ptr, align 8
+      ret i8* %2
     } |}]
 ;;
 
@@ -95,16 +125,22 @@ let%expect_test "division by variable" =
     {|
     define ocamlcc i8* @camlTest__f_XXX(i8* %x, i8* %y) gc "ocaml" {
     entry:
+      %alloc_ptr = alloca i8*, align 8
       %alloc = call i8* @caml_alloc(i64 1, i64 1277)
-      %gep = getelementptr inbounds i8, i8* %alloc, i64 0
+      store i8* %alloc, i8** %alloc_ptr, align 8
+      call void @llvm.gcroot(i8** %alloc_ptr, i8* null)
+      %alloc1 = call i8* @caml_alloc(i64 1, i64 1277)
+      store i8* %alloc1, i8** %alloc_ptr, align 8
+      %gep = getelementptr inbounds i8, i8* %alloc1, i64 0
       %load = bitcast i8* %x to double*
       %0 = load double, double* %load, align 8
-      %load1 = bitcast i8* %y to double*
-      %1 = load double, double* %load1, align 8
+      %load2 = bitcast i8* %y to double*
+      %1 = load double, double* %load2, align 8
       %binop = fdiv double %0, %1
       %2 = bitcast i8* %gep to double*
       store double %binop, double* %2, align 8
-      ret i8* %alloc
+      %3 = load i8*, i8** %alloc_ptr, align 8
+      ret i8* %3
     } |}]
 ;;
 

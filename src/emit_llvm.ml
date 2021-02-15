@@ -45,7 +45,7 @@ let value_of_data_item (data_item : Cmm.data_item) =
 
 let emit ~ctx ~this_module (cmm : Cmm.phrase list) =
   let builder = builder ctx in
-  let env = String.Table.create () in
+  let env : Cmm_to_llvm.t String.Table.t = String.Table.create () in
   (* Pre-define functions and globals to avoid issues with ordering. *)
   List.iter cmm ~f:(function
       | Cfunction cfundecl ->
@@ -105,14 +105,17 @@ _llambda_push_exn_handler:
               env
               ~key:(value_name arg)
               ~data:
-                (Var.Value
-                   { value = arg
-                   ; kind = (match machtype with [| x |] -> x | _ -> assert false)
-                   }));
+                { value = `Register arg
+                ; kind =
+                    (match machtype with
+                    | [| x |] -> Machtype x
+                    | [||] -> Void
+                    | _ -> assert false)
+                });
         String.Table.add_exn
           env
           ~key:cfundecl.fun_name
-          ~data:(Var.Value { value = fundecl; kind = Val });
+          ~data:{ value = `Register fundecl; kind = Machtype Val };
         let entry = append_block ctx "entry" fundecl in
         position_at_end entry builder;
         (try
@@ -135,7 +138,10 @@ _llambda_push_exn_handler:
                        ~llvm_function:
                          (Llvm.lookup_function name this_module : llvalue option)]; *)
                  if String.equal name cfundecl.fun_name
-                 then Some (`Direct { Cmm_to_llvm.value = fundecl; kind = Machtype Addr })
+                 then
+                   Some
+                     (`Direct
+                       { Cmm_to_llvm.value = `Register fundecl; kind = Machtype Addr })
                  else (
                    let name = mangle_symbol_name '$' name in
                    match Llvm.lookup_global name this_module with
@@ -145,21 +151,36 @@ _llambda_push_exn_handler:
                        let g =
                          build_pointercast g (pointer_type (i8_type ctx)) "" builder
                        in
-                       Some (`Direct { Cmm_to_llvm.value = g; kind = Machtype Addr })
+                       Some
+                         (`Direct
+                           { Cmm_to_llvm.value = `Register g; kind = Machtype Addr })
                      | None ->
                        let g = declare_global (i8_type ctx) name this_module in
-                       Some (`Direct { Cmm_to_llvm.value = g; kind = Machtype Int }))
+                       Some
+                         (`Direct
+                           { Cmm_to_llvm.value = `Register g; kind = Machtype Int }))
                    | Some g ->
-                     Some (`Direct { Cmm_to_llvm.value = g; kind = Machtype Val }))
+                     Some
+                       (`Direct { Cmm_to_llvm.value = `Register g; kind = Machtype Val }))
                ;;
              end)
            in
+           (* let initial_stack =
+             build_call Cmm_to_llvm.Intrinsics.stacksave [||] "" builder
+           in *)
            let ret_val = Cmm_to_llvm.compile_expression cfundecl.fun_body in
+           (* let (_ : llvalue) =
+             build_call
+               Cmm_to_llvm.Intrinsics.stackrestore
+               [| initial_stack |]
+               ""
+               builder
+           in *)
            build_ret
              (Cmm_to_llvm.promote_value_if_necessary_exn
                 ~new_machtype:(Machtype Val)
-                ret_val)
-               .value
+                ret_val
+             |> Cmm_to_llvm.llvm_value)
              builder
            |> (ignore : llvalue -> unit)
          with
