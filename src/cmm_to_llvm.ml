@@ -154,7 +154,6 @@ module With_context (Context : Context) = struct
       | Caddi -> build_add
       | Csubi -> build_sub
       | Cmuli -> build_mul
-      | Cmulhi -> build_mul
       | Cdivi -> build_sdiv
       | Cmodi -> build_srem
       | Cand -> build_and
@@ -163,6 +162,13 @@ module With_context (Context : Context) = struct
       | Clsl -> build_shl
       | Clsr -> build_lshr
       | Casr -> build_ashr
+      | Cmulhi ->
+        fun left right name builder ->
+          let left = build_lshr left (const_int 32 |> llvm_value) name builder in
+          let right = build_lshr right (const_int 32 |> llvm_value) name builder in
+          let output = build_mul left right name builder in
+          let output = build_shl output (const_int 32 |> llvm_value) name builder in
+          build_or output (const_int 1 |> llvm_value) name builder
       | _ -> assert false
     in
     let left = cast_to_int_if_necessary_exn left |> llvm_value in
@@ -251,19 +257,18 @@ module With_context (Context : Context) = struct
         compile_expression value
         |> promote_value_if_necessary_exn ~new_machtype:(Var.Kind.of_machtype machtype)
       in
+      let insertion_block = insertion_block builder in
+      let entry_bb = entry_block this_function in
+      (match block_terminator entry_bb with
+      | None -> position_at_end entry_bb builder
+      | Some terminator -> position_before terminator builder);
       let var_ptr = Llvm.build_alloca (raw_type var_value) var_name builder in
-      let previous_stack = build_call Intrinsics.stacksave [||] "" builder in
+      position_at_end insertion_block builder;
       let (_ : llvalue) = build_store (raw_value var_value) var_ptr builder in
-      let result =
-        with_var_in_env
-          ~name:var_name
-          ~value:{ value = `Stack var_ptr; kind = var_value.kind }
-          ~f:(fun () -> compile_expression body)
-      in
-      let (_ : llvalue) =
-        build_call Intrinsics.stackrestore [| previous_stack |] "" builder
-      in
-      result
+      with_var_in_env
+        ~name:var_name
+        ~value:{ value = `Stack var_ptr; kind = var_value.kind }
+        ~f:(fun () -> compile_expression body)
     | Cphantom_let _ ->
       raise_s
         [%message
@@ -299,8 +304,7 @@ module With_context (Context : Context) = struct
       compile_expression after
     | Cifthenelse (cond, _, then_, _, else_, _) ->
       let start_bb = insertion_block builder in
-      let cond = compile_expression cond |> cast_to_int_if_necessary_exn
-    |> llvm_value in
+      let cond = compile_expression cond |> cast_to_int_if_necessary_exn |> llvm_value in
       let cond = build_trunc cond (i1_type ctx) "" builder in
       let then_bb = append_block ctx "then" this_function in
       position_at_end then_bb builder;
@@ -458,6 +462,7 @@ module With_context (Context : Context) = struct
     | Ctrywith _ -> raise_s [%message "TODO: try/with" (expr : Cmm.expression)]
 
   and compile_operation operation args (_ : Ocaml_common.Debuginfo.t) =
+    (* eprint_s [%message "compile_operation" (operation : Cmm.operation)]; *)
     match operation, args with
     | Capply return_type, func :: args ->
       let func = compile_expression func in
@@ -483,14 +488,25 @@ module With_context (Context : Context) = struct
           (function_type return_type (List.map args ~f:Llvm.type_of |> Array.of_list))
           this_module
       in
+      (* eprint_s
+        [%message
+          "extcall" "extcall" (args : llvalue list) (func : llvalue) (does_alloc : bool)]; *)
       if does_alloc
       then (
-        let args = [ func ] @ args in
+        let args = func :: args in
         let function_type =
           function_type return_type (List.map args ~f:Llvm.type_of |> Array.of_list)
         in
         let caml_c_call = Llvm.declare_function "caml_c_call" function_type this_module in
-        let call = build_call caml_c_call (Array.of_list ([ func ] @ args)) "" builder in
+        (* eprint_s
+          [%message
+            "extcall"
+              (caml_c_call_old : llvalue option) (* (args : llvalue list) *)
+              ~arg_types:(List.map args ~f:Llvm.type_of : lltype list)
+              (func : llvalue)
+              (does_alloc : bool)
+              (caml_c_call : llvalue)]; *)
+        let call = build_call caml_c_call (Array.of_list args) "" builder in
         set_instruction_call_conv Declarations.ocaml_ext_calling_convention call;
         { value = `Register call; kind = return_kind })
       else (
@@ -624,6 +640,7 @@ module With_context (Context : Context) = struct
       }
     | Ccmpa _, _ -> assert false
     | (Caddf | Csubf | Cmulf | Cdivf), [ left; right ] ->
+      (* TODO melse: the float operations generated here aren't equivalent to ocamlopt. *)
       let left = compile_expression left in
       let right = compile_expression right in
       compile_float_binop ~operation left right
@@ -775,7 +792,33 @@ module With_context (Context : Context) = struct
           ());
       { kind = Machtype Val; value = `Stack ptr_ptr }
     | Calloc, _ -> assert false
-    | Ccheckbound, _ -> raise_s [%message "TODO check bounds"]
+    | Ccheckbound, [ upper_bound; index ] ->
+      let upper_bound =
+        compile_expression upper_bound |> cast_to_int_if_necessary_exn |> llvm_value
+      in
+      let index =
+        compile_expression index |> cast_to_int_if_necessary_exn |> llvm_value
+      in
+      (* {[
+      if index >= bound then
+        raise
+      else
+        ()
+      ]}
+      *)
+      let out_of_bounds = append_block ctx "oob" this_function in
+      let in_bounds = append_block ctx "inbounds" this_function in
+      let cond = build_icmp Slt index upper_bound "boundscheck" builder in
+      let (_ : llvalue) = build_cond_br cond in_bounds out_of_bounds builder in
+      position_at_end out_of_bounds builder;
+      (* TODO melse: throw an exception instead. *)
+      let abort = declare_function "abort" (function_type void_type [||]) this_module in
+      let (_ : llvalue) = build_call abort [||] "" builder in
+      (* let (_ : llvalue) = build_br out_of_bounds builder in *)
+      let (_ : llvalue) = build_unreachable builder in
+      position_at_end in_bounds builder;
+      const_int 1
+    | Ccheckbound, _ -> assert false
     | Craise _, [ exn ] ->
       let exn_val =
         compile_expression exn

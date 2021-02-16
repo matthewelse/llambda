@@ -65,13 +65,16 @@ let%expect_test "division by constant" =
     entry:
       %0 = ptrtoint i8* %x to i64
       %binop = ashr i64 %0, 1
-      %binop1 = mul i64 %binop, 7378697629483820647
-      %binop2 = ashr i64 %binop1, 2
-      %binop3 = lshr i64 %binop, 63
-      %binop4 = add i64 %binop2, %binop3
-      %binop5 = shl i64 %binop4, 1
-      %binop6 = add i64 %binop5, 1
-      %promote = inttoptr i64 %binop6 to i8*
+      %binop1 = lshr i64 %binop, 32
+      %binop2 = mul i64 %binop1, 1717986918
+      %binop3 = shl i64 %binop2, 32
+      %binop4 = or i64 %binop3, 1
+      %binop5 = ashr i64 %binop4, 2
+      %binop6 = lshr i64 %binop, 63
+      %binop7 = add i64 %binop5, %binop6
+      %binop8 = shl i64 %binop7, 1
+      %binop9 = add i64 %binop8, 1
+      %promote = inttoptr i64 %binop9 to i8*
       ret i8* %promote
     } |}]
 ;;
@@ -117,15 +120,18 @@ let%expect_test "modulo constant" =
     entry:
       %0 = ptrtoint i8* %x to i64
       %binop = ashr i64 %0, 1
-      %binop1 = mul i64 %binop, 7378697629483820647
-      %binop2 = ashr i64 %binop1, 2
-      %binop3 = lshr i64 %binop, 63
-      %binop4 = add i64 %binop2, %binop3
-      %binop5 = mul i64 %binop4, 10
-      %binop6 = sub i64 %binop, %binop5
-      %binop7 = shl i64 %binop6, 1
-      %binop8 = add i64 %binop7, 1
-      %promote = inttoptr i64 %binop8 to i8*
+      %binop1 = lshr i64 %binop, 32
+      %binop2 = mul i64 %binop1, 1717986918
+      %binop3 = shl i64 %binop2, 32
+      %binop4 = or i64 %binop3, 1
+      %binop5 = ashr i64 %binop4, 2
+      %binop6 = lshr i64 %binop, 63
+      %binop7 = add i64 %binop5, %binop6
+      %binop8 = mul i64 %binop7, 10
+      %binop9 = sub i64 %binop, %binop8
+      %binop10 = shl i64 %binop9, 1
+      %binop11 = add i64 %binop10, 1
+      %promote = inttoptr i64 %binop11 to i8*
       ret i8* %promote
     } |}]
 ;;
