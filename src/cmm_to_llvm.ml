@@ -287,7 +287,9 @@ module With_context (Context : Context) = struct
     | Cvar name ->
       let name = Backend_var.name name in
       (match String.Table.find env name with
-      | Some t -> t
+      | Some t ->
+        let value = llvm_value t in
+        { t with value = `Register value }
       | None -> raise_s [%message "Unknown variable" (name : string)])
     | Clet (var, value, body) ->
       let var_name = Backend_var.With_provenance.name var in
