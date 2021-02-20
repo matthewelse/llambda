@@ -113,6 +113,8 @@ let end_gen_implementation ?toplevel ~ctx ~this_module (clambda : Clambda.with_c
          Emit_llvm.emit ~ctx ~this_module phrases)
 ;;
 
+let ext_ll = "ll"
+
 let compile_implementation
     ?toplevel
     ~llvm_flags
@@ -123,7 +125,11 @@ let compile_implementation
     ~ppf_dump
     (program : Lambda.program)
   =
-  let irfile = Ident.name program.module_ident ^ ".ll" in
+  let irfile =
+    if !keep_asm_file || !Emitaux.binary_backend_available
+    then prefixname ^ ext_ll
+    else Filename.temp_file "camlasm" ext_ll
+  in
   let ctx = Llvm.global_context () in
   let impl_module = Llvm.create_module ctx (Ident.name program.module_ident) in
   Llvm.set_target_triple "x86_64-apple-macosx10.15.0" impl_module;
@@ -132,6 +138,10 @@ let compile_implementation
       let clambda_with_constants =
         middle_end ~backend ~filename ~prefixname ~ppf_dump program
       in
+      Llvm.add_named_metadata_operand
+        impl_module
+        "ocaml.module_name"
+        (Llvm.mdnode ctx [| Llvm.mdstring ctx (Ident.name program.module_ident) |]);
       end_gen_implementation
         ?toplevel
         ~this_module:impl_module
