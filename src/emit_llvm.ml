@@ -8,7 +8,7 @@ let type_of_function ctx (fundecl : Cmm.fundecl) =
   List.iter fundecl.fun_args ~f:(fun (name, machtype) ->
       String.Table.set
         env
-        ~key:(Backend_var.With_provenance.name name)
+        ~key:(Backend_var.With_provenance.var name |> Backend_var.unique_name)
         ~data:(machtype, Var.Kind.lltype_of_t ~ctx (Var.Kind.of_machtype machtype)));
   let return_type = Var.Kind.lltype_of_t ~ctx (Machtype Val) in
   let args =
@@ -96,7 +96,9 @@ _llambda_push_exn_handler:
           (params fundecl |> Array.to_list)
           cfundecl.fun_args
           ~f:(fun arg (name, machtype) ->
-            let real_name = Backend_var.With_provenance.name name in
+            let real_name =
+              Backend_var.With_provenance.var name |> Backend_var.unique_name
+            in
             set_value_name real_name arg;
             (* Core.eprint_s
               [%message

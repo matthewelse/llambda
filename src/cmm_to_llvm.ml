@@ -285,20 +285,20 @@ module With_context (Context : Context) = struct
       (* I think this is right - chances are we'll write it down somewhere. *)
       const_int64 ~signed:false (Nativeint.to_int64 value)
     | Cvar name ->
-      let name = Backend_var.name name in
+      let name = Backend_var.unique_name name in
       (match String.Table.find env name with
       | Some t ->
         let value = llvm_value t in
         { t with value = `Register value }
       | None -> raise_s [%message "Unknown variable" (name : string)])
     | Clet (var, value, body) ->
-      let var_name = Backend_var.With_provenance.name var in
+      let var_name = Backend_var.With_provenance.var var |> Backend_var.unique_name in
       let var_value = compile_expression value in
       with_var_in_env ~name:var_name ~value:var_value ~f:(fun () ->
           compile_expression body)
     | Clet_mut (var, machtype, value, body) ->
       (* Maybe we should convert these to ssa? *)
-      let var_name = Backend_var.With_provenance.name var in
+      let var_name = Backend_var.With_provenance.var var |> Backend_var.unique_name in
       let var_value =
         compile_expression value
         |> promote_value_if_necessary_exn
@@ -322,7 +322,7 @@ module With_context (Context : Context) = struct
         [%message
           "TODO: I don't know how to handle phantom lets yet." (expr : Cmm.expression)]
     | Cassign (var, new_value_expr) ->
-      let var_name = Backend_var.name var in
+      let var_name = Backend_var.unique_name var in
       (match String.Table.find env var_name with
       | None ->
         raise_s
