@@ -50,23 +50,25 @@ let%expect_test "return function" =
     define ocamlcc i8* @camlTest__f_XXX(i8* %x) gc "ocaml" {
     entry:
       %alloc_ptr = alloca i8*, align 8
-      %alloc = call i8* @caml_alloc(i64 3, i64 3319)
-      store i8* %alloc, i8** %alloc_ptr, align 8
-      call void @llvm.gcroot(i8** %alloc_ptr, i8* null)
-      %alloc1 = call i8* @caml_alloc(i64 3, i64 3319)
-      store i8* %alloc1, i8** %alloc_ptr, align 8
-      %gep = getelementptr inbounds i8, i8* %alloc1, i64 0
-      %0 = bitcast i8* %gep to i8**
-      store i8* bitcast (i8* (i8*, i8*)* @camlTest__anon_fn_873 to i8*), i8** %0, align 8
-      %gep2 = getelementptr inbounds i8, i8* %alloc1, i64 8
-      %1 = bitcast i8* %gep2 to i64*
-      store i64 3, i64* %1, align 4
-      %gep3 = getelementptr inbounds i8, i8* %alloc1, i64 16
-      %2 = ptrtoint i8* %x to i64
-      %binop = mul i64 %2, 10
-      %binop4 = add i64 %binop, -9
-      %3 = bitcast i8* %gep3 to i64*
-      store i64 %binop4, i64* %3, align 4
-      %4 = load i8*, i8** %alloc_ptr, align 8
-      ret i8* %4
+      call void @caml_alloc3()
+      %read_r15 = call i64 @llvm.read_register.i64(metadata !0)
+      %0 = inttoptr i64 %read_r15 to i8*
+      %1 = getelementptr i8, i8* %0, i64 8
+      store i8* %1, i8** %alloc_ptr, align 8
+      %2 = bitcast i8* %0 to i64*
+      store i64 3319, i64* %2, align 4
+      %gep = getelementptr inbounds i8, i8* %1, i64 0
+      %3 = bitcast i8* %gep to i8**
+      store i8* bitcast (i8* (i8*, i8*)* @camlTest__anon_fn_900 to i8*), i8** %3, align 8
+      %gep1 = getelementptr inbounds i8, i8* %1, i64 8
+      %4 = bitcast i8* %gep1 to i64*
+      store i64 3, i64* %4, align 4
+      %gep2 = getelementptr inbounds i8, i8* %1, i64 16
+      %5 = ptrtoint i8* %x to i64
+      %binop = mul i64 %5, 10
+      %binop3 = add i64 %binop, -9
+      %6 = bitcast i8* %gep2 to i64*
+      store i64 %binop3, i64* %6, align 4
+      %7 = load i8*, i8** %alloc_ptr, align 8
+      ret i8* %7
     } |}]

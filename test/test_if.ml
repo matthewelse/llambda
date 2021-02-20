@@ -15,7 +15,7 @@ let%expect_test "if statement" =
       br i1 %1, label %then, label %else
 
     then:                                             ; preds = %entry
-      %2 = call ocamlcc i8* bitcast (i8* @camlStdlib__print_endline_1181 to i8* (i8*)*)(i8* @camlTest__const_immstring_473)
+      %2 = call ocamlcc i8* bitcast (i8* @camlStdlib__print_endline_1181 to i8* (i8*)*)(i8* @camlTest__const_immstring_500)
       br label %merge
 
     else:                                             ; preds = %entry
@@ -93,13 +93,11 @@ let%expect_test "match" =
       %0 = ptrtoint i8* %x to i64
       %binop = or i64 %0, 1
       %binop1 = shl i64 %binop, 2
-      %promote = inttoptr i64 %binop1 to i8*
-      %1 = ptrtoint i8* %promote to i64
-      %2 = getelementptr i8, i8* @camlTest__1, i64 %1
-      %3 = getelementptr i8, i8* %2, i64 -4
-      %load = bitcast i8* %3 to i8**
-      %4 = load i8*, i8** %load, align 8
-      ret i8* %4
+      %1 = getelementptr i8, i8* @camlTest__1, i64 %binop1
+      %2 = getelementptr i8, i8* %1, i64 -4
+      %load = bitcast i8* %2 to i8**
+      %3 = load i8*, i8** %load, align 8
+      ret i8* %3
     } |}]
 ;;
 
@@ -139,11 +137,11 @@ let%expect_test "match+" =
       br label %merge
 
     merge:                                            ; preds = %else4, %then3
-      %iftmp = phi i8* [ @camlTest__const_immstring_584, %else4 ], [ @camlTest__const_immstring_586, %then3 ]
+      %iftmp = phi i8* [ @camlTest__const_immstring_611, %else4 ], [ @camlTest__const_immstring_613, %then3 ]
       br label %merge5
 
     merge5:                                           ; preds = %merge, %then
-      %iftmp6 = phi i8* [ %iftmp, %merge ], [ @camlTest__const_immstring_588, %then ]
+      %iftmp6 = phi i8* [ %iftmp, %merge ], [ @camlTest__const_immstring_615, %then ]
       ret i8* %iftmp6
     } |}]
 ;;

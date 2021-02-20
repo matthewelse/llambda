@@ -25,11 +25,45 @@ module With_context (Context : Context) = struct
         this_module
     ;;
 
-    let gcroot =
+    let _gcroot =
       Llvm.declare_function
         "llvm.gcroot"
         (function_type void_type [| pointer_type val_type; val_type |])
         this_module
+    ;;
+
+    let read_register reg builder =
+      let name = match reg with `r15 -> "r15" in
+      let reg =
+        let reg_md = mdstring ctx name in
+        mdnode ctx [| reg_md |]
+      in
+      let rtype = type_of reg in
+      let func =
+        Llvm.declare_function
+          "llvm.read_register.i64"
+          (function_type int_type [| rtype |])
+          this_module
+      in
+      let value = Llvm.build_call func [| reg |] "read_r15" builder in
+      Llvm.build_inttoptr value val_type "" builder
+    ;;
+
+    let write_register reg value builder =
+      let name = match reg with `r15 -> "r15" in
+      let reg =
+        let reg_md = mdstring ctx name in
+        mdnode ctx [| reg_md |]
+      in
+      let value = build_ptrtoint value int_type "" builder in
+      let rtype = type_of reg in
+      let func =
+        Llvm.declare_function
+          "llvm.write_register.i64"
+          (function_type void_type [| rtype; int_type |])
+          this_module
+      in
+      Llvm.build_call func [| reg; value |] "" builder
     ;;
   end
 
@@ -41,6 +75,7 @@ module With_context (Context : Context) = struct
   ;;
 
   let type_of_kind kind = Var.Kind.lltype_of_t ~ctx kind
+  let const_unit = { value = `Register (Llvm.const_int int_type 1); kind = Void }
 
   let const_int value =
     { value = `Register (Llvm.const_int int_type value); kind = Machtype Int }
@@ -51,6 +86,7 @@ module With_context (Context : Context) = struct
   ;;
 
   let const_pointer value =
+    (* print_s [%message "generating inttoptr" (value : int)]; *)
     { value = `Register (Llvm.const_inttoptr (Llvm.const_int int_type value) val_type)
     ; kind = Machtype Val
     }
@@ -80,7 +116,7 @@ module With_context (Context : Context) = struct
     result
   ;;
 
-  let promote_value_if_necessary ~(new_machtype : Var.Kind.t) t : t option =
+  let promote_value_if_necessary ?msg:_ ~(new_machtype : Var.Kind.t) t : t option =
     match new_machtype, t.kind with
     | Void, Void -> Some t
     | Machtype Int, Machtype Int
@@ -102,6 +138,9 @@ module With_context (Context : Context) = struct
         ; value =
             (match t.value with
             | `Register value ->
+              (* eprint_s
+                [%message
+                  "warning: generating inttoptr" (msg : Sexp.t option) (value : llvalue)]; *)
               `Register (Llvm.build_inttoptr value new_type "promote" builder)
             | `Stack value ->
               `Stack
@@ -118,11 +157,16 @@ module With_context (Context : Context) = struct
     | Never_returns, _ | _, Never_returns -> Some t
   ;;
 
-  let promote_value_if_necessary_exn ~new_machtype t =
-    match promote_value_if_necessary ~new_machtype t with
+  let promote_value_if_necessary_exn ?msg ~new_machtype t =
+    match promote_value_if_necessary ?msg ~new_machtype t with
     | Some t -> t
     | None ->
-      raise_s [%message "Unable to promote value." (new_machtype : Var.Kind.t) (t : t)]
+      raise_s
+        [%message
+          "Unable to promote value."
+            (msg : Sexp.t option)
+            (new_machtype : Var.Kind.t)
+            (t : t)]
   ;;
 
   let cast_to_int_if_necessary_exn t =
@@ -255,7 +299,9 @@ module With_context (Context : Context) = struct
       let var_name = Backend_var.With_provenance.name var in
       let var_value =
         compile_expression value
-        |> promote_value_if_necessary_exn ~new_machtype:(Var.Kind.of_machtype machtype)
+        |> promote_value_if_necessary_exn
+             ~msg:[%message "letmut" (expr : Cmm.expression)]
+             ~new_machtype:(Var.Kind.of_machtype machtype)
       in
       let insertion_block = insertion_block builder in
       let entry_bb = entry_block this_function in
@@ -291,12 +337,14 @@ module With_context (Context : Context) = struct
       | Some { value = `Stack ptr; kind } ->
         let new_value =
           compile_expression new_value_expr
-          |> promote_value_if_necessary_exn ~new_machtype:kind
+          |> promote_value_if_necessary_exn
+               ~msg:[%message "assign" (expr : Cmm.expression)]
+               ~new_machtype:kind
           |> llvm_value
         in
         let (_ : llvalue) = build_store new_value ptr builder in
-        const_int 1)
-    | Ctuple [] -> const_int 1
+        const_unit)
+    | Ctuple [] -> const_unit
     | Ctuple _ -> raise_s [%message "TODO: Handle larger tuples?"]
     | Cop (operation, args, debug_info) -> compile_operation operation args debug_info
     | Csequence (before, after) ->
@@ -327,10 +375,16 @@ module With_context (Context : Context) = struct
                 (else_ : Cmm.expression)]
       in
       let then_value =
-        promote_value_if_necessary_exn ~new_machtype:target_kind then_value
+        promote_value_if_necessary_exn
+          ~msg:[%message "ifthenelse" (expr : Cmm.expression)]
+          ~new_machtype:target_kind
+          then_value
       in
       let else_value =
-        promote_value_if_necessary_exn ~new_machtype:target_kind else_value
+        promote_value_if_necessary_exn
+          ~msg:[%message "ifthenelse" (expr : Cmm.expression)]
+          ~new_machtype:target_kind
+          else_value
       in
       (* in case the else block adds basic blocks *)
       let real_else_bb = insertion_block builder in
@@ -359,12 +413,17 @@ module With_context (Context : Context) = struct
       (match incoming with
       | [] ->
         remove_block merge_bb;
-        const_int 1
+        const_unit
       | _ ->
-        let incoming = List.map incoming ~f:(fun (t, bb) -> llvm_value t, bb) in
+        let incoming =
+          List.filter_map incoming ~f:(fun (t, bb) ->
+              match t.kind with Void -> None | _ -> Some (llvm_value t, bb))
+        in
         position_at_end merge_bb builder;
-        let value = build_phi incoming "iftmp" builder in
-        { value = `Register value; kind = target_kind })
+        if List.is_empty incoming
+        then { value = `Register (Llvm.const_int int_type 1); kind = Void }
+        else
+          { value = `Register (build_phi incoming "iftmp" builder); kind = target_kind })
     | Ccatch (_, [ (index, [], handler, _) ], body) ->
       let body_bb = insertion_block builder in
       let handler_bb = append_block ctx [%string "handler.%{index#Int}"] this_function in
@@ -398,18 +457,24 @@ module With_context (Context : Context) = struct
       (match incoming with
       | [] ->
         remove_block exit_bb;
-        const_int 1
+        const_unit
       | _ ->
-        let incoming = List.map incoming ~f:(fun (t, bb) -> llvm_value t, bb) in
+        let incoming =
+          List.filter_map incoming ~f:(fun (t, bb) ->
+              match t.kind with Void -> None | _ -> Some (llvm_value t, bb))
+        in
         position_at_end exit_bb builder;
-        { value = `Register (build_phi incoming [%string "phi.%{index#Int}"] builder)
-        ; kind = Machtype Val
-        })
+        if List.is_empty incoming
+        then const_unit
+        else
+          { value = `Register (build_phi incoming [%string "phi.%{index#Int}"] builder)
+          ; kind = Machtype Val
+          })
     | Ccatch _ ->
       raise_s [%message "TODO: complex catch statements" (expr : Cmm.expression)]
     | Cexit (index, []) ->
       let (_ : llvalue) = build_br (Int.Table.find_exn catches index) builder in
-      const_int 1
+      const_unit
     | Cexit _ -> raise_s [%message "TODO: complex exits" (expr : Cmm.expression)]
     | Cswitch (value, ints, expressions, _) ->
       let match_value =
@@ -441,7 +506,7 @@ module With_context (Context : Context) = struct
       (match results with
       | [] ->
         remove_block exit_bb;
-        const_int 1
+        const_unit
       | results ->
         let kind =
           List.map results ~f:(fun (t, _) -> t.kind)
@@ -457,8 +522,13 @@ module With_context (Context : Context) = struct
                          (l : Var.Kind.t)
                          (r : Var.Kind.t)])
         in
-        let incoming = List.map results ~f:(fun (t, builder) -> llvm_value t, builder) in
-        { value = `Register (build_phi incoming "phi" builder); kind })
+        let incoming =
+          List.filter_map results ~f:(fun (t, bb) ->
+              match t.kind with Void -> None | _ -> Some (llvm_value t, bb))
+        in
+        if List.is_empty incoming
+        then const_unit
+        else { value = `Register (build_phi incoming "phi" builder); kind })
     | Ctrywith _ -> raise_s [%message "TODO: try/with" (expr : Cmm.expression)]
 
   and compile_operation operation args (_ : Ocaml_common.Debuginfo.t) =
@@ -516,29 +586,27 @@ module With_context (Context : Context) = struct
     | Caddv, [ left; right ] ->
       let left =
         compile_expression left
-        |> promote_value_if_necessary_exn ~new_machtype:(Machtype Val)
+        |> promote_value_if_necessary_exn
+             ~msg:[%message "addv" (operation : Cmm.operation)]
+             ~new_machtype:(Machtype Val)
         |> llvm_value
       in
       let right =
-        compile_expression right
-        |> promote_value_if_necessary_exn ~new_machtype:(Machtype Val)
-        |> llvm_value
+        compile_expression right |> cast_to_int_if_necessary_exn |> llvm_value
       in
-      let right = build_ptrtoint right int_type "" builder in
       { kind = Machtype Val; value = `Register (build_gep left [| right |] "" builder) }
     | Caddv, _ -> assert false
     | Cadda, [ left; right ] ->
       let left =
         compile_expression left
-        |> promote_value_if_necessary_exn ~new_machtype:(Machtype Addr)
+        |> promote_value_if_necessary_exn
+             ~msg:[%message "adda"]
+             ~new_machtype:(Machtype Addr)
         |> llvm_value
       in
       let right =
-        compile_expression right
-        |> promote_value_if_necessary_exn ~new_machtype:(Machtype Addr)
-        |> llvm_value
+        compile_expression right |> cast_to_int_if_necessary_exn |> llvm_value
       in
-      let right = build_ptrtoint right int_type "" builder in
       { kind = Machtype Addr; value = `Register (build_gep left [| right |] "" builder) }
     | Cadda, _ -> assert false
     | ( ( Caddi | Csubi | Cmuli | Cmulhi | Cdivi | Cmodi | Cand | Cor | Cxor | Clsl | Clsr
@@ -547,6 +615,7 @@ module With_context (Context : Context) = struct
       (* We should be able to do these operations on Val too *)
       let left = compile_expression left in
       let right = compile_expression right in
+      (* print_s [%message "binary operation" (left : t) (right : t)]; *)
       compile_int_binop ~operation left right
     | ( ( Caddi | Csubi | Cmuli | Cmulhi | Cdivi | Cmodi | Cand | Cor | Cxor | Clsl | Clsr
         | Casr )
@@ -620,12 +689,16 @@ module With_context (Context : Context) = struct
       in
       let left =
         compile_expression left
-        |> promote_value_if_necessary_exn ~new_machtype:(Machtype Addr)
+        |> promote_value_if_necessary_exn
+             ~msg:[%message "cmpa"]
+             ~new_machtype:(Machtype Addr)
         |> llvm_value
       in
       let right =
         compile_expression right
-        |> promote_value_if_necessary_exn ~new_machtype:(Machtype Addr)
+        |> promote_value_if_necessary_exn
+             ~msg:[%message "cmpa"]
+             ~new_machtype:(Machtype Addr)
         |> llvm_value
       in
       let diff = build_ptrdiff left right "diff" builder in
@@ -672,6 +745,7 @@ module With_context (Context : Context) = struct
     | Cload (memory_chunk, _mutability), [ src ] ->
       let ptr =
         promote_value_if_necessary_exn
+          ~msg:[%message "cload"]
           ~new_machtype:(Machtype Addr)
           (compile_expression src)
         |> llvm_value
@@ -691,12 +765,13 @@ module With_context (Context : Context) = struct
       in
       let ptr = build_pointercast ptr (pointer_type mem_lltype) "load" builder in
       let value = build_load ptr "" builder in
+      let result_type = type_of_kind (Machtype kind) in
       let value =
         match should_extend with
         | `Don't -> value
-        | `Zero -> build_zext value mem_lltype "zext" builder
-        | `Signed -> build_sext value mem_lltype "sext" builder
-        | `Float -> build_fpext value mem_lltype "fpext" builder
+        | `Zero -> build_zext value result_type "zext" builder
+        | `Signed -> build_sext value result_type "sext" builder
+        | `Float -> build_fpext value result_type "fpext" builder
       in
       { value = `Register value; kind = Machtype kind }
     | Cload _, _ -> assert false
@@ -716,7 +791,9 @@ module With_context (Context : Context) = struct
       in
       let value =
         compile_expression value
-        |> promote_value_if_necessary_exn ~new_machtype:(Machtype kind)
+        |> promote_value_if_necessary_exn
+             ~msg:[%message "store value"]
+             ~new_machtype:(Machtype kind)
         |> llvm_value
       in
       let write_value =
@@ -727,15 +804,17 @@ module With_context (Context : Context) = struct
       in
       let ptr =
         compile_expression dst
-        |> promote_value_if_necessary_exn ~new_machtype:(Machtype Addr)
+        |> promote_value_if_necessary_exn
+             ~msg:[%message "store dest"]
+             ~new_machtype:(Machtype Addr)
         |> llvm_value
       in
       let ptr = build_pointercast ptr (pointer_type mem_lltype) "" builder in
       (* eprint_s [%message "building store" (ptr : llvalue) (write_value : llvalue)]; *)
       let (_ : llvalue) = build_store write_value ptr builder in
-      const_int 1
+      { (const_int 1) with kind = Void }
     | Cstore _, _ -> assert false
-    | Calloc, tag :: data ->
+    | Calloc, tag :: data when false ->
       let caml_alloc =
         Llvm.declare_function
           "caml_alloc"
@@ -748,7 +827,9 @@ module With_context (Context : Context) = struct
       in
       let tag_value =
         compile_expression tag
-        |> promote_value_if_necessary_exn ~new_machtype:(Machtype Int)
+        |> promote_value_if_necessary_exn
+             ~msg:[%message "calloc"]
+             ~new_machtype:(Machtype Int)
         |> llvm_value
       in
       let length = const_int (List.length data) |> llvm_value in
@@ -774,12 +855,67 @@ module With_context (Context : Context) = struct
       let ptr_ptr = build_alloca (pointer_type (i8_type ctx)) "alloc_ptr" builder in
       let ptr = build_call caml_alloc [| length; tag_value |] "alloc" builder in
       let (_ : llvalue) = build_store ptr ptr_ptr builder in
-      let (_ : llvalue) =
+      position_at_end insertion_block builder;
+      (* let (_ : llvalue) =
         build_call Intrinsics.gcroot [| ptr_ptr; const_pointer_null val_type |] "" builder
-      in
+      in *)
       position_at_end insertion_block builder;
       let ptr = build_call caml_alloc [| length; tag_value |] "alloc" builder in
       let (_ : llvalue) = build_store ptr ptr_ptr builder in
+      List.iteri data ~f:(fun i elem ->
+          let elem_ptr =
+            build_in_bounds_gep ptr [| const_int (i * 8) |> llvm_value |] "gep" builder
+          in
+          let value = compile_expression elem |> llvm_value in
+          let elem_ptr =
+            build_pointercast elem_ptr (pointer_type (type_of value)) "" builder
+          in
+          let (_ : llvalue) = build_store value elem_ptr builder in
+          ());
+      { kind = Machtype Val; value = `Stack ptr_ptr }
+    | Calloc, tag :: data ->
+      let insertion_block = insertion_block builder in
+      let entry_bb = entry_block this_function in
+      (match block_terminator entry_bb with
+      | None -> position_at_end entry_bb builder
+      | Some terminator -> position_before terminator builder);
+      let ptr_ptr = build_alloca (pointer_type (i8_type ctx)) "alloc_ptr" builder in
+      position_at_end insertion_block builder;
+      let bytes = 8 + (List.length data * 8) in
+      let bytes_ll = const_int bytes |> llvm_value in
+      let function_to_call =
+        match bytes with
+        | 16 -> "caml_alloc1"
+        | 24 -> "caml_alloc2"
+        | 32 -> "caml_alloc3"
+        | _ ->
+          let r15 = Intrinsics.read_register `r15 builder in
+          let new_r15 = build_sub r15 bytes_ll "" builder in
+          let (_ : llvalue) = Intrinsics.write_register `r15 new_r15 builder in
+          "caml_allocN"
+      in
+      let caml_alloc =
+        Llvm.declare_function function_to_call (function_type void_type [||]) this_module
+      in
+      let (_ : llvalue) = build_call caml_alloc [||] "" builder in
+      let r15 = Intrinsics.read_register `r15 builder in
+      let ptr = build_gep r15 [| const_int 8 |> llvm_value |] "" builder in
+      let tag_value =
+        compile_expression tag
+        |> promote_value_if_necessary_exn
+             ~msg:[%message "calloc"]
+             ~new_machtype:(Machtype Int)
+        |> llvm_value
+      in
+      let (_ : llvalue) = build_store ptr ptr_ptr builder in
+      (* let (_ : llvalue) =
+        build_call Intrinsics.gcroot [| ptr_ptr; const_pointer_null val_type |] "" builder
+      in *)
+      let tag_ptr = r15 in
+      let tag_ptr =
+        build_pointercast tag_ptr (pointer_type (type_of tag_value)) "" builder
+      in
+      let (_ : llvalue) = build_store tag_value tag_ptr builder in
       List.iteri data ~f:(fun i elem ->
           let elem_ptr =
             build_in_bounds_gep ptr [| const_int (i * 8) |> llvm_value |] "gep" builder
@@ -817,12 +953,14 @@ module With_context (Context : Context) = struct
       (* let (_ : llvalue) = build_br out_of_bounds builder in *)
       let (_ : llvalue) = build_unreachable builder in
       position_at_end in_bounds builder;
-      const_int 1
+      { (const_int 1) with kind = Void }
     | Ccheckbound, _ -> assert false
     | Craise _, [ exn ] ->
       let exn_val =
         compile_expression exn
-        |> promote_value_if_necessary_exn ~new_machtype:(Machtype Val)
+        |> promote_value_if_necessary_exn
+             ~msg:[%message "raise"]
+             ~new_machtype:(Machtype Val)
         |> llvm_value
       in
       let call = build_call llambda_raise_exn [| exn_val |] "" builder in

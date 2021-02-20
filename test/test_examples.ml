@@ -22,7 +22,8 @@ let%expect_test "post-order visit" =
     entry:
       %0 = getelementptr i8, i8* %t, i64 -8
       %1 = load i8, i8* %0, align 1
-      %2 = trunc i8 %1 to i1
+      %zext = zext i8 %1 to i64
+      %2 = trunc i64 %zext to i1
       br i1 %2, label %then, label %else
 
     then:                                             ; preds = %entry

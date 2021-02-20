@@ -178,6 +178,7 @@ _llambda_push_exn_handler:
            in *)
            build_ret
              (Cmm_to_llvm.promote_value_if_necessary_exn
+                ~msg:[%message "promoting return value"]
                 ~new_machtype:(Machtype Val)
                 ret_val
              |> Cmm_to_llvm.llvm_value)

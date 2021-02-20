@@ -26,7 +26,6 @@ let%expect_test "for loop" =
       br label %exit.1
 
     exit.1:                                           ; preds = %handler.1
-      %phi.1 = phi i64 [ 1, %handler.1 ]
       ret i8* inttoptr (i64 1 to i8*)
 
     then:                                             ; preds = %entry
@@ -57,6 +56,5 @@ let%expect_test "for loop" =
       br label %merge
 
     merge:                                            ; preds = %else4
-      %iftmp = phi i64 [ 1, %else4 ]
       br label %handler.2
     } |}]

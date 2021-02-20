@@ -9,19 +9,21 @@ let%expect_test "addition" =
     define ocamlcc i8* @camlTest__f_XXX(i8* %x) gc "ocaml" {
     entry:
       %alloc_ptr = alloca i8*, align 8
-      %alloc = call i8* @caml_alloc(i64 1, i64 1277)
-      store i8* %alloc, i8** %alloc_ptr, align 8
-      call void @llvm.gcroot(i8** %alloc_ptr, i8* null)
-      %alloc1 = call i8* @caml_alloc(i64 1, i64 1277)
-      store i8* %alloc1, i8** %alloc_ptr, align 8
-      %gep = getelementptr inbounds i8, i8* %alloc1, i64 0
+      call void @caml_alloc1()
+      %read_r15 = call i64 @llvm.read_register.i64(metadata !0)
+      %0 = inttoptr i64 %read_r15 to i8*
+      %1 = getelementptr i8, i8* %0, i64 8
+      store i8* %1, i8** %alloc_ptr, align 8
+      %2 = bitcast i8* %0 to i64*
+      store i64 1277, i64* %2, align 4
+      %gep = getelementptr inbounds i8, i8* %1, i64 0
       %load = bitcast i8* %x to double*
-      %0 = load double, double* %load, align 8
-      %binop = fadd double %0, 1.000000e+01
-      %1 = bitcast i8* %gep to double*
-      store double %binop, double* %1, align 8
-      %2 = load i8*, i8** %alloc_ptr, align 8
-      ret i8* %2
+      %3 = load double, double* %load, align 8
+      %binop = fadd double %3, 1.000000e+01
+      %4 = bitcast i8* %gep to double*
+      store double %binop, double* %4, align 8
+      %5 = load i8*, i8** %alloc_ptr, align 8
+      ret i8* %5
     } |}]
 ;;
 
@@ -32,19 +34,21 @@ let%expect_test "subtraction of constant" =
     define ocamlcc i8* @camlTest__f_XXX(i8* %x) gc "ocaml" {
     entry:
       %alloc_ptr = alloca i8*, align 8
-      %alloc = call i8* @caml_alloc(i64 1, i64 1277)
-      store i8* %alloc, i8** %alloc_ptr, align 8
-      call void @llvm.gcroot(i8** %alloc_ptr, i8* null)
-      %alloc1 = call i8* @caml_alloc(i64 1, i64 1277)
-      store i8* %alloc1, i8** %alloc_ptr, align 8
-      %gep = getelementptr inbounds i8, i8* %alloc1, i64 0
+      call void @caml_alloc1()
+      %read_r15 = call i64 @llvm.read_register.i64(metadata !0)
+      %0 = inttoptr i64 %read_r15 to i8*
+      %1 = getelementptr i8, i8* %0, i64 8
+      store i8* %1, i8** %alloc_ptr, align 8
+      %2 = bitcast i8* %0 to i64*
+      store i64 1277, i64* %2, align 4
+      %gep = getelementptr inbounds i8, i8* %1, i64 0
       %load = bitcast i8* %x to double*
-      %0 = load double, double* %load, align 8
-      %binop = fsub double %0, 1.000000e+01
-      %1 = bitcast i8* %gep to double*
-      store double %binop, double* %1, align 8
-      %2 = load i8*, i8** %alloc_ptr, align 8
-      ret i8* %2
+      %3 = load double, double* %load, align 8
+      %binop = fsub double %3, 1.000000e+01
+      %4 = bitcast i8* %gep to double*
+      store double %binop, double* %4, align 8
+      %5 = load i8*, i8** %alloc_ptr, align 8
+      ret i8* %5
     } |}]
 ;;
 
@@ -55,21 +59,23 @@ let%expect_test "subtraction by variable" =
     define ocamlcc i8* @camlTest__f_XXX(i8* %x, i8* %y) gc "ocaml" {
     entry:
       %alloc_ptr = alloca i8*, align 8
-      %alloc = call i8* @caml_alloc(i64 1, i64 1277)
-      store i8* %alloc, i8** %alloc_ptr, align 8
-      call void @llvm.gcroot(i8** %alloc_ptr, i8* null)
-      %alloc1 = call i8* @caml_alloc(i64 1, i64 1277)
-      store i8* %alloc1, i8** %alloc_ptr, align 8
-      %gep = getelementptr inbounds i8, i8* %alloc1, i64 0
+      call void @caml_alloc1()
+      %read_r15 = call i64 @llvm.read_register.i64(metadata !0)
+      %0 = inttoptr i64 %read_r15 to i8*
+      %1 = getelementptr i8, i8* %0, i64 8
+      store i8* %1, i8** %alloc_ptr, align 8
+      %2 = bitcast i8* %0 to i64*
+      store i64 1277, i64* %2, align 4
+      %gep = getelementptr inbounds i8, i8* %1, i64 0
       %load = bitcast i8* %x to double*
-      %0 = load double, double* %load, align 8
-      %load2 = bitcast i8* %y to double*
-      %1 = load double, double* %load2, align 8
-      %binop = fsub double %0, %1
-      %2 = bitcast i8* %gep to double*
-      store double %binop, double* %2, align 8
-      %3 = load i8*, i8** %alloc_ptr, align 8
-      ret i8* %3
+      %3 = load double, double* %load, align 8
+      %load1 = bitcast i8* %y to double*
+      %4 = load double, double* %load1, align 8
+      %binop = fsub double %3, %4
+      %5 = bitcast i8* %gep to double*
+      store double %binop, double* %5, align 8
+      %6 = load i8*, i8** %alloc_ptr, align 8
+      ret i8* %6
     } |}]
 ;;
 
@@ -80,19 +86,21 @@ let%expect_test "multiplication" =
     define ocamlcc i8* @camlTest__f_XXX(i8* %x) gc "ocaml" {
     entry:
       %alloc_ptr = alloca i8*, align 8
-      %alloc = call i8* @caml_alloc(i64 1, i64 1277)
-      store i8* %alloc, i8** %alloc_ptr, align 8
-      call void @llvm.gcroot(i8** %alloc_ptr, i8* null)
-      %alloc1 = call i8* @caml_alloc(i64 1, i64 1277)
-      store i8* %alloc1, i8** %alloc_ptr, align 8
-      %gep = getelementptr inbounds i8, i8* %alloc1, i64 0
+      call void @caml_alloc1()
+      %read_r15 = call i64 @llvm.read_register.i64(metadata !0)
+      %0 = inttoptr i64 %read_r15 to i8*
+      %1 = getelementptr i8, i8* %0, i64 8
+      store i8* %1, i8** %alloc_ptr, align 8
+      %2 = bitcast i8* %0 to i64*
+      store i64 1277, i64* %2, align 4
+      %gep = getelementptr inbounds i8, i8* %1, i64 0
       %load = bitcast i8* %x to double*
-      %0 = load double, double* %load, align 8
-      %binop = fmul double %0, 1.000000e+01
-      %1 = bitcast i8* %gep to double*
-      store double %binop, double* %1, align 8
-      %2 = load i8*, i8** %alloc_ptr, align 8
-      ret i8* %2
+      %3 = load double, double* %load, align 8
+      %binop = fmul double %3, 1.000000e+01
+      %4 = bitcast i8* %gep to double*
+      store double %binop, double* %4, align 8
+      %5 = load i8*, i8** %alloc_ptr, align 8
+      ret i8* %5
     } |}]
 ;;
 
@@ -103,19 +111,21 @@ let%expect_test "division by constant" =
     define ocamlcc i8* @camlTest__f_XXX(i8* %x) gc "ocaml" {
     entry:
       %alloc_ptr = alloca i8*, align 8
-      %alloc = call i8* @caml_alloc(i64 1, i64 1277)
-      store i8* %alloc, i8** %alloc_ptr, align 8
-      call void @llvm.gcroot(i8** %alloc_ptr, i8* null)
-      %alloc1 = call i8* @caml_alloc(i64 1, i64 1277)
-      store i8* %alloc1, i8** %alloc_ptr, align 8
-      %gep = getelementptr inbounds i8, i8* %alloc1, i64 0
+      call void @caml_alloc1()
+      %read_r15 = call i64 @llvm.read_register.i64(metadata !0)
+      %0 = inttoptr i64 %read_r15 to i8*
+      %1 = getelementptr i8, i8* %0, i64 8
+      store i8* %1, i8** %alloc_ptr, align 8
+      %2 = bitcast i8* %0 to i64*
+      store i64 1277, i64* %2, align 4
+      %gep = getelementptr inbounds i8, i8* %1, i64 0
       %load = bitcast i8* %x to double*
-      %0 = load double, double* %load, align 8
-      %binop = fdiv double %0, 1.000000e+01
-      %1 = bitcast i8* %gep to double*
-      store double %binop, double* %1, align 8
-      %2 = load i8*, i8** %alloc_ptr, align 8
-      ret i8* %2
+      %3 = load double, double* %load, align 8
+      %binop = fdiv double %3, 1.000000e+01
+      %4 = bitcast i8* %gep to double*
+      store double %binop, double* %4, align 8
+      %5 = load i8*, i8** %alloc_ptr, align 8
+      ret i8* %5
     } |}]
 ;;
 
@@ -126,21 +136,23 @@ let%expect_test "division by variable" =
     define ocamlcc i8* @camlTest__f_XXX(i8* %x, i8* %y) gc "ocaml" {
     entry:
       %alloc_ptr = alloca i8*, align 8
-      %alloc = call i8* @caml_alloc(i64 1, i64 1277)
-      store i8* %alloc, i8** %alloc_ptr, align 8
-      call void @llvm.gcroot(i8** %alloc_ptr, i8* null)
-      %alloc1 = call i8* @caml_alloc(i64 1, i64 1277)
-      store i8* %alloc1, i8** %alloc_ptr, align 8
-      %gep = getelementptr inbounds i8, i8* %alloc1, i64 0
+      call void @caml_alloc1()
+      %read_r15 = call i64 @llvm.read_register.i64(metadata !0)
+      %0 = inttoptr i64 %read_r15 to i8*
+      %1 = getelementptr i8, i8* %0, i64 8
+      store i8* %1, i8** %alloc_ptr, align 8
+      %2 = bitcast i8* %0 to i64*
+      store i64 1277, i64* %2, align 4
+      %gep = getelementptr inbounds i8, i8* %1, i64 0
       %load = bitcast i8* %x to double*
-      %0 = load double, double* %load, align 8
-      %load2 = bitcast i8* %y to double*
-      %1 = load double, double* %load2, align 8
-      %binop = fdiv double %0, %1
-      %2 = bitcast i8* %gep to double*
-      store double %binop, double* %2, align 8
-      %3 = load i8*, i8** %alloc_ptr, align 8
-      ret i8* %3
+      %3 = load double, double* %load, align 8
+      %load1 = bitcast i8* %y to double*
+      %4 = load double, double* %load1, align 8
+      %binop = fdiv double %3, %4
+      %5 = bitcast i8* %gep to double*
+      store double %binop, double* %5, align 8
+      %6 = load i8*, i8** %alloc_ptr, align 8
+      ret i8* %6
     } |}]
 ;;
 

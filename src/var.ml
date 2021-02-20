@@ -11,7 +11,7 @@ module Kind = struct
   let lltype_of_t ~ctx (kind : t) =
     match kind with
     | Void -> void_type ctx
-    | Machtype Int -> i16_type ctx
+    | Machtype Int -> i64_type ctx
     | Machtype Val | Machtype Addr -> pointer_type (i8_type ctx)
     | Machtype Float -> double_type ctx
     | Never_returns -> void_type ctx
