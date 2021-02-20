@@ -40,8 +40,6 @@ let compile_genfuns f =
 
 let assemble_llvm_ir ~llvm_flags ~ir_filename ~obj_filename () =
   let result =
-    (* We need to run -O3 to reduce the amount of stack space used, so the GC
-    printer doesn't die *)
     Ccomp.command
       ("/Users/melse/Development/llambda/external/llvm/llvm-project/build/bin/opt -S \
         -mem2reg "
