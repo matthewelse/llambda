@@ -25,7 +25,7 @@ module With_context (Context : Context) = struct
         this_module
     ;;
 
-    let _gcroot =
+    let gcroot =
       Llvm.declare_function
         "llvm.gcroot"
         (function_type void_type [| pointer_type val_type; val_type |])
@@ -33,7 +33,7 @@ module With_context (Context : Context) = struct
     ;;
 
     let read_register reg builder =
-      let name = match reg with `r15 -> "r15" in
+      let name = match reg with `r15 -> "r15" | `r14 -> "r14" in
       let reg =
         let reg_md = mdstring ctx name in
         mdnode ctx [| reg_md |]
@@ -577,6 +577,11 @@ module With_context (Context : Context) = struct
               (does_alloc : bool)
               (caml_c_call : llvalue)]; *)
         let call = build_call caml_c_call (Array.of_list args) "" builder in
+        (* Epilogue to a c call - put r15 into *r14... *)
+        let r14 = Intrinsics.read_register `r14 builder in
+        let r14 = build_pointercast r14 (pointer_type int_type) "" builder in
+        let star_r14 = build_load r14 "" builder in
+        let (_ : llvalue) = Intrinsics.write_register `r15 star_r14 builder in
         set_instruction_call_conv Declarations.ocaml_ext_calling_convention call;
         { value = `Register call; kind = return_kind })
       else (
@@ -814,65 +819,6 @@ module With_context (Context : Context) = struct
       let (_ : llvalue) = build_store write_value ptr builder in
       { (const_int 1) with kind = Void }
     | Cstore _, _ -> assert false
-    | Calloc, tag :: data when false ->
-      let caml_alloc =
-        Llvm.declare_function
-          "caml_alloc"
-          (function_type
-             val_type
-             [| (* block size words *) int_type
-              ; (*tag *) int_type (* actually a char *)
-             |])
-          this_module
-      in
-      let tag_value =
-        compile_expression tag
-        |> promote_value_if_necessary_exn
-             ~msg:[%message "calloc"]
-             ~new_machtype:(Machtype Int)
-        |> llvm_value
-      in
-      let length = const_int (List.length data) |> llvm_value in
-      (* eprint_s
-        [%message "building call" (caml_alloc : llvalue) (length : t) (tag_value : t)]; *)
-      (* LLVM is sad if we try to put the allocated pointer on the stack
-
-        TODO melse: we probably need to introduce a new kind, which is a pointer
-        to an ocaml block, which we de-reference when we need it. We
-        additionally need to consider that pointer on the stack volatile (across
-        calls into the OCaml runtime), since the garbage collector could change
-        it to point somewhere else during a minor GC. 
-
-        There are some more challenges with using LLVM's gcroot intrinsic - all
-        of the calls to @llvm.gcroot have to be in the entry basic block,
-        otherwise we break things. *)
-      (* Build an alloca in the entry bb for this function *)
-      let insertion_block = insertion_block builder in
-      let entry_bb = entry_block this_function in
-      (match block_terminator entry_bb with
-      | None -> position_at_end entry_bb builder
-      | Some terminator -> position_before terminator builder);
-      let ptr_ptr = build_alloca (pointer_type (i8_type ctx)) "alloc_ptr" builder in
-      let ptr = build_call caml_alloc [| length; tag_value |] "alloc" builder in
-      let (_ : llvalue) = build_store ptr ptr_ptr builder in
-      position_at_end insertion_block builder;
-      (* let (_ : llvalue) =
-        build_call Intrinsics.gcroot [| ptr_ptr; const_pointer_null val_type |] "" builder
-      in *)
-      position_at_end insertion_block builder;
-      let ptr = build_call caml_alloc [| length; tag_value |] "alloc" builder in
-      let (_ : llvalue) = build_store ptr ptr_ptr builder in
-      List.iteri data ~f:(fun i elem ->
-          let elem_ptr =
-            build_in_bounds_gep ptr [| const_int (i * 8) |> llvm_value |] "gep" builder
-          in
-          let value = compile_expression elem |> llvm_value in
-          let elem_ptr =
-            build_pointercast elem_ptr (pointer_type (type_of value)) "" builder
-          in
-          let (_ : llvalue) = build_store value elem_ptr builder in
-          ());
-      { kind = Machtype Val; value = `Stack ptr_ptr }
     | Calloc, tag :: data ->
       let insertion_block = insertion_block builder in
       let entry_bb = entry_block this_function in
@@ -880,6 +826,9 @@ module With_context (Context : Context) = struct
       | None -> position_at_end entry_bb builder
       | Some terminator -> position_before terminator builder);
       let ptr_ptr = build_alloca (pointer_type (i8_type ctx)) "alloc_ptr" builder in
+      let (_ : llvalue) =
+        build_call Intrinsics.gcroot [| ptr_ptr; const_pointer_null val_type |] "" builder
+      in
       position_at_end insertion_block builder;
       let bytes = 8 + (List.length data * 8) in
       let bytes_ll = const_int bytes |> llvm_value in
