@@ -282,7 +282,6 @@ module With_context (Context : Context) = struct
         raise_s [%message "BUG: global symbol on the stack"]
       | None -> raise_s [%message "Unknown global" (name : string)])
     | Cblockheader (value, _) ->
-      (* I think this is right - chances are we'll write it down somewhere. *)
       const_int64 ~signed:false (Nativeint.to_int64 value)
     | Cvar name ->
       let name = Backend_var.unique_name name in
