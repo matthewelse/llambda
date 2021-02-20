@@ -588,7 +588,6 @@ module With_context (Context : Context) = struct
         { value = `Register call; kind = return_kind })
       else (
         let call = build_call func (Array.of_list args) "" builder in
-        set_instruction_call_conv Declarations.ocaml_calling_convention call;
         { value = `Register call; kind = return_kind })
     | Caddv, [ left; right ] ->
       let left =
