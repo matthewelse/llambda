@@ -25,7 +25,6 @@ let mangle_symbol_name esc s =
 ;;
 
 let value_of_data_item (data_item : Cmm.data_item) =
-  (* TODO melse: mangle name for global and define symbols *)
   match data_item with
   | Cdefine_symbol name -> "_" ^ mangle_symbol_name '$' name ^ ":"
   | Cglobal_symbol name -> ".globl _" ^ mangle_symbol_name '$' name
