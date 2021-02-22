@@ -48,11 +48,8 @@ through clambda or flambda to produce c--. Compile directly from c-- to LLVM.
 - [ ] exception handling
 - [x] raise exceptions
 - [x] handle allocations properly (GC segfaults right now)
-
-## Issues with c--
-
-It's hard to distinguish between integers and pointers in C--, it basically
-doesn't have enough type information for something like LLVM.
+- [ ] figure out how to make tests stable across platforms (right now we end up
+  with subtly different test output on Linux vs. macos)
 
 ## LLVM changes
 
@@ -62,13 +59,18 @@ doesn't have enough type information for something like LLVM.
 
 ## Building LLVM & OCaml bindings
 
+This is tested on macos and Linux, with OCaml 4.11.1 with and without flambda.
+You may need `-DBUILD_SHARED_LIBS=On` if you don't have enough RAM to statically
+link libLLVM.
+
 ### Build LLVM:
 
 ```bash
 cd external/llvm/llvm-project
 mkdir build
 cd build
-cmake -G Ninja -DLLVM_ENABLE_PROJECTS='' -DCMAKE_BUILD_TYPE=Debug -DLLVM_ENABLE_ASSERTIONS=On -DLLVM_TARGETS_TO_BUILD="X86" ../llvm
+cmake -G Ninja -DLLVM_ENABLE_PROJECTS='' -DCMAKE_BUILD_TYPE=Debug \
+      -DLLVM_ENABLE_ASSERTIONS=On -DLLVM_TARGETS_TO_BUILD="X86" ../llvm
 ninja # this is a good time to go and get some lunch
 ```
 
@@ -83,7 +85,7 @@ dune build
 ## Potential optimisations
 
 - If we can tag variables as being integers (in 2n+1) form, we can have a custom
-  pass based on instcombine that assumes taht the value begins with an |1
+  pass based on instcombine that assumes that the value begins with an |1
   operation.
 - More accurate types for global variables (i.e. not i8*)
 - Fewer `inttoptr`s, since they just make other optimisations harder. Emit GEPs
