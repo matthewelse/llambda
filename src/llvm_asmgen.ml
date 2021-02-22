@@ -113,7 +113,7 @@ let end_gen_implementation ?toplevel ~ctx ~this_module (clambda : Clambda.with_c
          Emit_llvm.emit ~ctx ~this_module phrases)
 ;;
 
-let ext_ll = "ll"
+let ext_ll = ".ll"
 
 let compile_implementation
     ?toplevel
