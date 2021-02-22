@@ -560,6 +560,8 @@ module With_context (Context : Context) = struct
       (* 1. allocate stack space for the handler *)
       let prev_stack = build_call Intrinsics.stacksave [||] "prev_stack" builder in
       let handler_ptr = build_alloca val_type "handler" builder in
+      (* For debugging purposes *)
+      let (_ : llvalue) = build_store (const_int 0xF00FACE |> llvm_value) (build_pointercast handler_ptr (pointer_type int_type) "" builder) builder in 
       (* eprint_s
         [%message "done some more stuff" (prev_stack : llvalue) (handler_ptr : llvalue)]; *)
       (* 2. allocate stack space for the old handler *)
