@@ -35,6 +35,20 @@ module Cmm = struct
     in
     Sexp.Atom s
   ;;
+
+  let sexp_of_machtype = [%sexp_of: machtype_component array]
+end
+
+module Backend_var = struct
+  include Ocaml_optcomp.Backend_var
+
+  module With_provenance = struct
+    include With_provenance
+
+    let sexp_of_t t = Sexp.Atom (unique_name (var t))
+  end
+
+  let sexp_of_t t = Sexp.Atom (unique_name t)
 end
 
 module Cmmgen = Ocaml_optcomp.Cmmgen
