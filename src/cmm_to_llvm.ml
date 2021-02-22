@@ -536,12 +536,12 @@ module With_context (Context : Context) = struct
         then const_unit
         else { value = `Register (build_phi incoming "phi" builder); kind })
     | Ctrywith (expr, var, handler, _) ->
-      eprint_s
+      (* eprint_s
         [%message
           "Ctrywith"
             (expr : Cmm.expression)
             (var : Backend_var.With_provenance.t)
-            (handler : Cmm.expression)];
+            (handler : Cmm.expression)]; *)
       (* The way we catch exceptions in llambda is super dumb, but is intended
          as a straight-forward way of implementing OCaml exceptions, without
          having to teach LLVM about OCaml's exception semantics. *)
@@ -554,23 +554,23 @@ module With_context (Context : Context) = struct
           "domain_exn_ptr"
           builder
       in
-      eprint_s
+      (* eprint_s
         [%message
-          "allocate stack space" (domain_state_ptr : llvalue) (domain_exn_ptr : llvalue)];
+          "allocate stack space" (domain_state_ptr : llvalue) (domain_exn_ptr : llvalue)]; *)
       (* 1. allocate stack space for the handler *)
       let prev_stack = build_call Intrinsics.stacksave [||] "prev_stack" builder in
       let handler_ptr = build_alloca val_type "handler" builder in
-      eprint_s
-        [%message "done some more stuff" (prev_stack : llvalue) (handler_ptr : llvalue)];
+      (* eprint_s
+        [%message "done some more stuff" (prev_stack : llvalue) (handler_ptr : llvalue)]; *)
       (* 2. allocate stack space for the old handler *)
       let old_handler_ptr = build_alloca val_type "old_handler" builder in
       let (_ : llvalue) = build_store domain_exn_ptr old_handler_ptr builder in
-      eprint_s
+      (* eprint_s
         [%message
           "build_call"
             (llambda_setjmp : llvalue)
             (handler_ptr : llvalue)
-            (domain_exn_ptr : llvalue)];
+            (domain_exn_ptr : llvalue)]; *)
       (* 3. call the doubly-returning function. this either returns null, or the exception *)
       let result =
         build_call llambda_setjmp [| handler_ptr; domain_exn_ptr |] "result" builder
@@ -579,7 +579,7 @@ module With_context (Context : Context) = struct
       let body_bb = append_block ctx "body" this_function in
       let handler_bb = append_block ctx "handler" this_function in
       let merge_bb = append_block ctx "merge" this_function in
-      eprint_s [%message "done even more stuff" (result : llvalue)];
+      (* eprint_s [%message "done even more stuff" (result : llvalue)]; *)
       (* 4. branch to the handler if the exception is returned *)
       let exception_was_not_raised =
         build_is_null result "exception_was_raised" builder
