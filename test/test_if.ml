@@ -6,9 +6,9 @@ let%expect_test "if statement" =
   runtest [%str let f x = if x > 10 then print_endline "Hello, world"];
   [%expect
     {|
-    define ocamlcc i8* @camlTest__f_XXX(i8* %x) gc "ocaml" {
+    define ocamlcc i8* @camlTest__f_XXX(i8* %x_85) gc "ocaml" {
     entry:
-      %0 = ptrtoint i8* %x to i64
+      %0 = ptrtoint i8* %x_85 to i64
       %icmp = icmp sgt i64 %0, 21
       %zext = zext i1 %icmp to i64
       %1 = trunc i64 %zext to i1
@@ -31,9 +31,9 @@ let%expect_test "if/else" =
   runtest [%str let f x = if x > 10 then `Hello else `World];
   [%expect
     {|
-    define ocamlcc i8* @camlTest__f_XXX(i8* %x) gc "ocaml" {
+    define ocamlcc i8* @camlTest__f_XXX(i8* %x_85) gc "ocaml" {
     entry:
-      %0 = ptrtoint i8* %x to i64
+      %0 = ptrtoint i8* %x_85 to i64
       %icmp = icmp sgt i64 %0, 21
       %zext = zext i1 %icmp to i64
       %1 = trunc i64 %zext to i1
@@ -88,9 +88,9 @@ let%expect_test "match" =
   *)
   [%expect
     {|
-    define ocamlcc i8* @camlTest__f_XXX(i8* %x) gc "ocaml" {
+    define ocamlcc i8* @camlTest__f_XXX(i8* %x_94) gc "ocaml" {
     entry:
-      %0 = ptrtoint i8* %x to i64
+      %0 = ptrtoint i8* %x_94 to i64
       %binop = or i64 %0, 1
       %binop1 = shl i64 %binop, 2
       %1 = getelementptr i8, i8* @camlTest__1, i64 %binop1
@@ -112,9 +112,9 @@ let%expect_test "match+" =
       ;;];
   [%expect
     {|
-    define ocamlcc i8* @camlTest__f_XXX(i8* %x, i8* %y) gc "ocaml" {
+    define ocamlcc i8* @camlTest__f_XXX(i8* %x_87, i8* %y_86) gc "ocaml" {
     entry:
-      %0 = ptrtoint i8* %x to i64
+      %0 = ptrtoint i8* %x_87 to i64
       %icmp = icmp sge i64 %0, 1876772325
       %zext = zext i1 %icmp to i64
       %1 = trunc i64 %zext to i1
@@ -124,7 +124,7 @@ let%expect_test "match+" =
       br label %merge5
 
     else:                                             ; preds = %entry
-      %2 = ptrtoint i8* %y to i64
+      %2 = ptrtoint i8* %y_86 to i64
       %icmp1 = icmp sgt i64 %2, 21
       %zext2 = zext i1 %icmp1 to i64
       %3 = trunc i64 %zext2 to i1

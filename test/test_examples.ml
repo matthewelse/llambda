@@ -1,23 +1,25 @@
-
 open Core
 open Ppxlib
 open Helpers
 
 let%expect_test "post-order visit" =
-  runtest ~show_functions:["postorder"] [%str
-    type 'a t =
-      | Leaf of 'a
-      | Branch of 'a * 'a t * 'a t
+  runtest
+    ~show_functions:[ "postorder" ]
+    [%str
+      type 'a t =
+        | Leaf of 'a
+        | Branch of 'a * 'a t * 'a t
 
-    let rec postorder ~f t =
-      match t with
-      | Leaf x -> f x
-      | Branch (value, left, right) ->
-        postorder ~f left; 
-        postorder ~f right;
-        f value
-  ];
-  [%expect {|
+      let rec postorder ~f t =
+        match t with
+        | Leaf x -> f x
+        | Branch (value, left, right) ->
+          postorder ~f left;
+          postorder ~f right;
+          f value
+      ;;];
+  [%expect
+    {|
     define ocamlcc i8* @camlTest__postorder_XXX(i8* %f, i8* %t) gc "ocaml" {
     entry:
       %0 = getelementptr i8, i8* %t, i64 -8
@@ -56,3 +58,8 @@ let%expect_test "post-order visit" =
       %iftmp = phi i8* [ %14, %else ], [ %11, %then ]
       ret i8* %iftmp
     } |}]
+;;
+
+let%expect_test "hello world" =
+  runtest ~show_functions:[ "f" ] [%str let f () = print_endline "hello, world!"]
+;;
