@@ -3,14 +3,15 @@ open Ppxlib
 open Helpers
 
 let%expect_test "for loop" =
-  runtest [%str
-    let f n f =
-      for i = 0 to n do
-        f ()
-      done
-    ;;
-  ];
-  [%expect {|
+  runtest
+    [%str
+      let f n f =
+        for i = 0 to n do
+          f ()
+        done
+      ;;];
+  [%expect
+    {|
     define ocamlcc i8* @camlTest__f_XXX(i8* %n_88, i8* %f_87) gc "ocaml" {
     entry:
       %i_90 = alloca i64, align 8
@@ -58,3 +59,4 @@ let%expect_test "for loop" =
     merge:                                            ; preds = %else4
       br label %handler.2
     } |}]
+;;

@@ -3,24 +3,19 @@ open Ppxlib
 open Helpers
 
 let%expect_test "try/with" =
-  runtest ~show_functions:["f"; "g"] [%str
-    exception Sad_times of int
+  runtest
+    ~show_functions:[ "f"; "g" ]
+    [%str
+      exception Sad_times of int
 
-    let g x =
-      if x = 0 then
-        raise (Sad_times 0)
-      else
-        x * 10
+      let g x = if x = 0 then raise (Sad_times 0) else x * 10
 
-    let f n m =
-      let result = 
-        try g n with
-        | Sad_times res -> res  
-      in
-      m * result 
-    ;;
-  ];
-  [%expect {|
+      let f n m =
+        let result = try g n with Sad_times res -> res in
+        m * result
+      ;;];
+  [%expect
+    {|
     (Ctrywith (expr "(app \"camlTest__g_20\" n/108 val)") (var exn_111)
      (handler
        "(if (== (load_mut val exn/111) \"camlTest__Pmakeblock_70\")\
@@ -125,3 +120,4 @@ let%expect_test "try/with" =
       %promote = inttoptr i64 %iftmp to i8*
       ret i8* %promote
     } |}]
+;;

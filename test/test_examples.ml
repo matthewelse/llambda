@@ -62,7 +62,8 @@ let%expect_test "post-order visit" =
 
 let%expect_test "hello world" =
   runtest ~show_functions:[ "f" ] [%str let f () = print_endline "hello, world!"];
-  [%expect {|
+  [%expect
+    {|
     define ocamlcc i8* @camlTest__f_XXX(i8* %param_85) gc "ocaml" {
     entry:
       %0 = call ocamlcc i8* bitcast (i8* @camlStdlib__print_endline_1181 to i8* (i8*)*)(i8* @camlTest__const_immstring_856)

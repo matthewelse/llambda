@@ -54,9 +54,11 @@ end
 module Cmmgen = Ocaml_optcomp.Cmmgen
 
 let sexp_of_lltype lltype : Sexp.t = Atom (string_of_lltype lltype)
-let sexp_of_llvalue llvalue : Sexp.t =
-  let value =  (string_of_llvalue llvalue) in
-  [%message (value : string) ~typ:((type_of llvalue) : lltype)]
-let sexp_of_llcontext (_ : llcontext) : Sexp.t = [%sexp `llcontext]
 
+let sexp_of_llvalue llvalue : Sexp.t =
+  let value = string_of_llvalue llvalue in
+  [%message (value : string) ~typ:(type_of llvalue : lltype)]
+;;
+
+let sexp_of_llcontext (_ : llcontext) : Sexp.t = [%sexp `llcontext]
 let sexp_of_llbasicblock block = sexp_of_llvalue (value_of_block block)

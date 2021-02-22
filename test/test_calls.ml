@@ -3,12 +3,10 @@ open Ppxlib
 open Helpers
 
 let%expect_test "basic ocaml function call" =
-  runtest ~show_functions:["f"; "g"] [%str 
-    let f x = x + 10 
-
-    let g y = 2 * (f y)
-  ];
-  [%expect {|
+  runtest ~show_functions:[ "f"; "g" ] [%str let f x = x + 10
+                                             let g y = 2 * f y];
+  [%expect
+    {|
     define ocamlcc i8* @camlTest__g_XXX(i8* %y) gc "ocaml" {
     entry:
       %0 = ptrtoint i8* %y to i64
@@ -25,19 +23,23 @@ let%expect_test "basic ocaml function call" =
       %promote = inttoptr i64 %binop to i8*
       ret i8* %promote
     } |}]
+;;
 
 let%expect_test "return function" =
-  runtest ~show_functions:["f"; "g"; "fun"] [%str 
-    let f x = 
-      let x = x * 10 in
-      fun y -> 
-        x + y
+  runtest
+    ~show_functions:[ "f"; "g"; "fun" ]
+    [%str
+      let f x =
+        let x = x * 10 in
+        fun y -> x + y
+      ;;
 
-    let g y = 
-      let f = f y in
-      f 10
-  ];
-  [%expect {|
+      let g y =
+        let f = f y in
+        f 10
+      ;;];
+  [%expect
+    {|
     define ocamlcc i8* @camlTest__g_XXX(i8* %y) gc "ocaml" {
     entry:
       %0 = ptrtoint i8* %y to i64
@@ -72,3 +74,4 @@ let%expect_test "return function" =
       %7 = load i8*, i8** %alloc_ptr, align 8
       ret i8* %7
     } |}]
+;;
