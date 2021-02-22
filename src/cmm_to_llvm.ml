@@ -281,8 +281,7 @@ module With_context (Context : Context) = struct
         (* TODO: unify this with direct/indirect *)
         raise_s [%message "BUG: global symbol on the stack"]
       | None -> raise_s [%message "Unknown global" (name : string)])
-    | Cblockheader (value, _) ->
-      const_int64 ~signed:false (Nativeint.to_int64 value)
+    | Cblockheader (value, _) -> const_int64 ~signed:false (Nativeint.to_int64 value)
     | Cvar name ->
       let name = Backend_var.unique_name name in
       (match String.Table.find env name with
@@ -831,7 +830,7 @@ module With_context (Context : Context) = struct
       in
       position_at_end insertion_block builder;
       let bytes = 8 + (List.length data * 8) in
-      let bytes_ll = const_int bytes |> llvm_value in
+      let bytes_ll = const_int (-bytes) |> llvm_value in
       let function_to_call =
         match bytes with
         | 16 -> "caml_alloc1"
@@ -839,7 +838,7 @@ module With_context (Context : Context) = struct
         | 32 -> "caml_alloc3"
         | _ ->
           let r15 = Intrinsics.read_register `r15 builder in
-          let new_r15 = build_sub r15 bytes_ll "" builder in
+          let new_r15 = build_gep r15 [| bytes_ll |] "" builder in
           let (_ : llvalue) = Intrinsics.write_register `r15 new_r15 builder in
           "caml_allocN"
       in
