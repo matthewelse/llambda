@@ -90,11 +90,12 @@ _llambda_raise_exn:
 _llambda_setjmp:
   // put the return address of this function in pointer provided as this
   // function's first argument
+  // FIXME: There's a bug in the exception-thrown case. I assume this is the problem.
   mov (%rsp),%rdi
   mov %rdi,(%rax)
   // put the old stack pointer into *rbx
   mov %rsp,%rax
-  sub $8,%rax
+  add $8,%rax
   mov %rax,(%rbx)
   // return zero the first time round
   xor %rax,%rax
