@@ -1,5 +1,10 @@
 # Llambda: An LLVM backend for OCaml
 
+This is a crazy (and unimaginative) experiment to build an LLVM backend for
+OCaml. It is intended to be correct enough to satisfy my need to see the right
+numbers printed to standard output. It is (probably very) buggy and certainly
+doesn't generate great code.
+
 Big hairy audacious goal: interop with the existing flambda/lambda OCaml
 compilers for optimising straight-line memory-access-intensive code that could
 benefit from LLVM's peephole optimisations, as well as things like vector
