@@ -41,8 +41,7 @@ let compile_genfuns f =
 let assemble_llvm_ir ~llvm_flags ~ir_filename ~obj_filename () =
   let result =
     Ccomp.command
-      ("/Users/melse/Development/llambda/external/llvm/llvm-project/build/bin/opt -S \
-        -mem2reg "
+      ("~/development/llambda/external/llvm/llvm-project/build/bin/opt -S -mem2reg "
       ^ llvm_flags
       ^ " -o "
       ^ Filename.quote ir_filename
@@ -52,8 +51,7 @@ let assemble_llvm_ir ~llvm_flags ~ir_filename ~obj_filename () =
   if result = 0
   then
     Ccomp.command
-      ("/Users/melse/Development/llambda/external/llvm/llvm-project/build/bin/llc \
-        -filetype obj "
+      ("~/development/llambda/external/llvm/llvm-project/build/bin/llc -filetype obj "
       ^ llvm_flags
       ^ " "
       ^ String.concat " " (Misc.debug_prefix_map_flags ())
@@ -132,7 +130,14 @@ let compile_implementation
   in
   let ctx = Llvm.global_context () in
   let impl_module = Llvm.create_module ctx (Ident.name program.module_ident) in
-  Llvm.set_target_triple "x86_64-apple-macosx10.15.0" impl_module;
+  let target_triple =
+    (* FIXME melse: Do something more principled here. e.g. call llvm-config --host-triple *)
+    match Ocaml_common.Config.system with
+    | "macosx" -> "x86_64-apple-macosx10.15.0"
+    | "linux" -> "x86_64-unknown-linux-gnu"
+    | _ -> Core.raise_s [%message "Unsupported system type. Maybe just add an extra target triple."]
+  in
+  Llvm.set_target_triple target_triple impl_module;
   compile_unit ~llvm_flags irfile !keep_asm_file (prefixname ^ ext_obj) (fun () ->
       Ident.Set.iter Compilenv.require_global program.required_globals;
       let clambda_with_constants =

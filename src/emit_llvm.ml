@@ -24,9 +24,10 @@ let mangle_symbol_name esc s =
 ;;
 
 let value_of_data_item (data_item : Cmm.data_item) =
+  let prefix = match Ocaml_common.Config.system with "macosx" -> "_" | _ -> "" in
   match data_item with
-  | Cdefine_symbol name -> "_" ^ mangle_symbol_name '$' name ^ ":"
-  | Cglobal_symbol name -> ".globl _" ^ mangle_symbol_name '$' name
+  | Cdefine_symbol name -> prefix ^ mangle_symbol_name '$' name ^ ":"
+  | Cglobal_symbol name -> ".globl " ^ prefix ^ mangle_symbol_name '$' name
   | Cint8 value -> sprintf ".byte %d" value
   | Cint16 value -> sprintf ".word %d" value
   | Cint32 value -> sprintf !".long %{Nativeint}" value
@@ -217,7 +218,9 @@ _llambda_setjmp:
             [%message
               "exception raised while compiling function"
                 ~name:(cfundecl.fun_name : string)
-                ~args:(cfundecl.fun_args : (Backend_var.With_provenance.t * Cmm.machtype) list)
+                ~args:
+                  (cfundecl.fun_args
+                    : (Backend_var.With_provenance.t * Cmm.machtype) list)
                 ~expr:(cfundecl.fun_body : Cmm.expression)
                 (exn : Exn.t)]
           in
