@@ -262,7 +262,6 @@ module With_context (Context : Context) = struct
   ;;
 
   let rec compile_expression (expr : Cmm.expression) : t =
-    (* Core.eprint_s [%message "compiling expression" (expr : Cmm.expression)]; *)
     match expr with
     | Cconst_int (value, _) -> const_int value
     | Cconst_natint (value, _) -> const_int64 (Nativeint.to_int64 value)
@@ -529,10 +528,9 @@ module With_context (Context : Context) = struct
         if List.is_empty incoming
         then const_unit
         else { value = `Register (build_phi incoming "phi" builder); kind })
-    | Ctrywith _ -> raise_s [%message "TODO: try/with" (expr : Cmm.expression)]
-
+    | Ctrywith _ -> raise_s [%message "sad times"]
+  
   and compile_operation operation args (_ : Ocaml_common.Debuginfo.t) =
-    (* eprint_s [%message "compile_operation" (operation : Cmm.operation)]; *)
     match operation, args with
     | Capply return_type, func :: args ->
       let func = compile_expression func in
