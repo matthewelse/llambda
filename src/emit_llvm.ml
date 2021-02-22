@@ -1,6 +1,5 @@
 open! Core
 open! Import
-module Backend_var = Ocaml_optcomp.Backend_var
 module Debug_info = Ocaml_common.Debuginfo
 
 let type_of_function ctx (fundecl : Cmm.fundecl) =
@@ -191,11 +190,10 @@ _llambda_push_exn_handler:
             [%message
               "exception raised while compiling function"
                 ~name:(cfundecl.fun_name : string)
+                ~args:(cfundecl.fun_args : (Backend_var.With_provenance.t * Cmm.machtype) list)
                 ~expr:(cfundecl.fun_body : Cmm.expression)
                 (exn : Exn.t)]
           in
-          (* eprint_s msg; *)
-          delete_function fundecl;
           raise_s msg)
       | Cdata _ -> ())
 ;;
