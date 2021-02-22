@@ -2,7 +2,6 @@
 
 open! Core
 open! Import
-module Backend_var = Ocaml_optcomp.Backend_var
 include Cmm_to_llvm_intf
 
 module With_context (Context : Context) = struct
@@ -71,6 +70,14 @@ module With_context (Context : Context) = struct
     Llvm.declare_function
       "llambda_raise_exn"
       (function_type void_type [| val_type |])
+      this_module
+  ;;
+
+  let llambda_setjmp =
+    (* FIXME melse: this should be annotated as returns_twice *)
+    Llvm.declare_function
+      "llambda_setjmp"
+      (function_type val_type [| pointer_type val_type; val_type |])
       this_module
   ;;
 
@@ -528,8 +535,127 @@ module With_context (Context : Context) = struct
         if List.is_empty incoming
         then const_unit
         else { value = `Register (build_phi incoming "phi" builder); kind })
-    | Ctrywith _ -> raise_s [%message "sad times"]
-  
+    | Ctrywith (expr, var, handler, _) ->
+      eprint_s
+        [%message
+          "Ctrywith"
+            (expr : Cmm.expression)
+            (var : Backend_var.With_provenance.t)
+            (handler : Cmm.expression)];
+      (* The way we catch exceptions in llambda is super dumb, but is intended
+         as a straight-forward way of implementing OCaml exceptions, without
+         having to teach LLVM about OCaml's exception semantics. *)
+      let domain_state_ptr = Intrinsics.read_register `r14 builder in
+      let domain_exn_ptr =
+        let offset = Ocaml_common.Domainstate.idx_of_field Domain_exception_pointer * 8 in
+        build_in_bounds_gep
+          domain_state_ptr
+          [| const_int offset |> llvm_value |]
+          "domain_exn_ptr"
+          builder
+      in
+      eprint_s
+        [%message
+          "allocate stack space" (domain_state_ptr : llvalue) (domain_exn_ptr : llvalue)];
+      (* 1. allocate stack space for the handler *)
+      let prev_stack = build_call Intrinsics.stacksave [||] "prev_stack" builder in
+      let handler_ptr = build_alloca val_type "handler" builder in
+      eprint_s
+        [%message "done some more stuff" (prev_stack : llvalue) (handler_ptr : llvalue)];
+      (* 2. allocate stack space for the old handler *)
+      let old_handler_ptr = build_alloca val_type "old_handler" builder in
+      let (_ : llvalue) = build_store domain_exn_ptr old_handler_ptr builder in
+      eprint_s
+        [%message
+          "build_call"
+            (llambda_setjmp : llvalue)
+            (handler_ptr : llvalue)
+            (domain_exn_ptr : llvalue)];
+      (* 3. call the doubly-returning function. this either returns null, or the exception *)
+      let result =
+        build_call llambda_setjmp [| handler_ptr; domain_exn_ptr |] "result" builder
+      in
+      set_instruction_call_conv Declarations.ocaml_calling_convention result;
+      let body_bb = append_block ctx "body" this_function in
+      let handler_bb = append_block ctx "handler" this_function in
+      let merge_bb = append_block ctx "merge" this_function in
+      eprint_s [%message "done even more stuff" (result : llvalue)];
+      (* 4. branch to the handler if the exception is returned *)
+      let exception_was_not_raised =
+        build_is_null result "exception_was_raised" builder
+      in
+      let (_ : llvalue) =
+        build_cond_br exception_was_not_raised body_bb handler_bb builder
+      in
+      (* 5. compile the bit between try and with *)
+      position_at_end body_bb builder;
+      let good_case = compile_expression expr in
+      let real_body_bb = insertion_block builder in
+      let incoming =
+        match block_terminator real_body_bb with
+        | None ->
+          let (_ : llvalue) = build_br merge_bb builder in
+          [ good_case, real_body_bb ]
+        | Some _ -> []
+      in
+      (* 6. compile the handler *)
+      position_at_end handler_bb builder;
+      let (_ : llvalue) =
+        build_call Intrinsics.stackrestore [| prev_stack |] "" builder
+      in
+      let bad_case =
+        with_var_in_env
+          ~name:(Backend_var.unique_name (Backend_var.With_provenance.var var))
+          ~value:{ value = `Register result; kind = Machtype Val }
+          ~f:(fun () -> compile_expression handler)
+      in
+      let real_handler_bb = insertion_block builder in
+      let incoming =
+        match block_terminator real_handler_bb with
+        | None ->
+          let (_ : llvalue) = build_br merge_bb builder in
+          (bad_case, real_handler_bb) :: incoming
+        | Some _ -> incoming
+      in
+      (match incoming with
+      | [] ->
+        remove_block merge_bb;
+        const_unit
+      | _ ->
+        let target_kind =
+          List.map incoming ~f:(fun (t, _) -> t.kind)
+          |> List.reduce_exn ~f:(fun l r ->
+                 match l, r with
+                 | Machtype l, Machtype r -> Var.Kind.Machtype (Cmm.lub_component l r)
+                 | Void, Void -> Void
+                 | Never_returns, other | other, Never_returns -> other
+                 | Void, _ | _, Void ->
+                   raise_s [%message "Try/with with mis-matching branches."])
+        in
+        let incoming =
+          List.filter_map incoming ~f:(fun (t, bb) ->
+              match t.kind with
+              | Void -> None
+              | _ ->
+                Some
+                  ( promote_value_if_necessary_exn ~new_machtype:target_kind t
+                    |> llvm_value
+                  , bb ))
+        in
+        position_at_end merge_bb builder;
+        let result =
+          if List.is_empty incoming
+          then const_unit
+          else
+            { value = `Register (build_phi incoming [%string "phi"] builder)
+            ; kind = Machtype Val
+            }
+        in
+        let (_ : llvalue) =
+          build_call Intrinsics.stackrestore [| prev_stack |] "" builder
+        in
+        result)
+
   and compile_operation operation args (_ : Ocaml_common.Debuginfo.t) =
     match operation, args with
     | Capply return_type, func :: args ->
