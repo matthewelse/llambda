@@ -68,9 +68,36 @@ _llambda_raise_exn:
   popq 16(%r14)
   popq %r11
   jmp *%r11
+
+// takes two pointers as arguments - one for the 'handler' address, and
+// one for the old handler thing
+// 
+// This is a little bit different to ocamlopt's exception handling. For
+// simplicity's sake, rather than teaching LLVM about OCaml exception
+// handling, we turn it into something that looks like setjmp/longjump.
+//
+// This 'function' takes two pointers as arguments, and returns (up to)
+// TWICE. The first time it returns, it returns zero, indicating that the
+// normal code path should be taken. The second time, it returns non-zero
+// (actually the thing raising an exception calls the return address, but
+// same difference), indicating that an exception was raised.
+//
+// this is obviously crap codegen, but in the spirit of building something
+// that works, and makes as few changes to LLVM as possible, let's give it
+// a go
 .text
-_llambda_push_exn_handler:
-  jmp _llambda_push_exn_handler
+_llambda_setjmp:
+  // put the return address of this function in pointer provided as this
+  // function's first argument
+  mov (%rsp),%rdi
+  mov %rdi,(%rax)
+  // put the old stack pointer into *rbx
+  mov %rsp,%rax
+  sub $8,%rax
+  mov %rax,(%rbx)
+  // return zero the first time round
+  xor %rax,%rax
+  ret
   |}
   in
   List.iter cmm ~f:(function
