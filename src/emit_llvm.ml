@@ -18,16 +18,19 @@ let type_of_function ctx (fundecl : Cmm.fundecl) =
 ;;
 
 let mangle_symbol_name esc s =
-  String.concat_map s ~f:(function
-      | ('A' .. 'Z' | 'a' .. 'z' | '0' .. '9' | '_') as c -> Char.to_string c
-      | c -> sprintf "%c%02x" esc (Char.to_int c))
+  let prefix = match Ocaml_common.Config.system with "macosx" -> "_" | _ -> "" in
+  let mangled_name =
+    String.concat_map s ~f:(function
+        | ('A' .. 'Z' | 'a' .. 'z' | '0' .. '9' | '_') as c -> Char.to_string c
+        | c -> sprintf "%c%02x" esc (Char.to_int c))
+  in
+  prefix ^ mangled_name
 ;;
 
 let value_of_data_item (data_item : Cmm.data_item) =
-  let prefix = match Ocaml_common.Config.system with "macosx" -> "_" | _ -> "" in
   match data_item with
-  | Cdefine_symbol name -> prefix ^ mangle_symbol_name '$' name ^ ":"
-  | Cglobal_symbol name -> ".globl " ^ prefix ^ mangle_symbol_name '$' name
+  | Cdefine_symbol name -> mangle_symbol_name '$' name ^ ":"
+  | Cglobal_symbol name -> ".globl " ^ mangle_symbol_name '$' name
   | Cint8 value -> sprintf ".byte %d" value
   | Cint16 value -> sprintf ".word %d" value
   | Cint32 value -> sprintf !".long %{Nativeint}" value
@@ -37,7 +40,7 @@ let value_of_data_item (data_item : Cmm.data_item) =
     sprintf !".quad %{Int64}" int
   | Csingle _ -> assert false
   | Cstring literal -> sprintf !".ascii \"%s\"" literal
-  | Csymbol_address name -> sprintf !".quad _%s" (mangle_symbol_name '$' name)
+  | Csymbol_address name -> sprintf !".quad %s" (mangle_symbol_name '$' name)
   | Calign n -> sprintf !".align %d" n
   | Cskip n -> sprintf !".space %d" n
 ;;

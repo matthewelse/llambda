@@ -15,7 +15,7 @@ let%expect_test "if statement" =
       br i1 %1, label %then, label %else
 
     then:                                             ; preds = %entry
-      %2 = call ocamlcc i8* bitcast (i8* @camlStdlib__print_endline_1181 to i8* (i8*)*)(i8* @camlTest__const_immstring_500)
+      %2 = call ocamlcc i8* bitcast (i8* @camlStdlib__print_endline_1181 to i8* (i8*)*)(i8* @camlTest__const_immstring_593)
       br label %merge
 
     else:                                             ; preds = %entry
@@ -137,11 +137,11 @@ let%expect_test "match+" =
       br label %merge
 
     merge:                                            ; preds = %else4, %then3
-      %iftmp = phi i8* [ @camlTest__const_immstring_611, %else4 ], [ @camlTest__const_immstring_613, %then3 ]
+      %iftmp = phi i8* [ @camlTest__const_immstring_704, %else4 ], [ @camlTest__const_immstring_706, %then3 ]
       br label %merge5
 
     merge5:                                           ; preds = %merge, %then
-      %iftmp6 = phi i8* [ %iftmp, %merge ], [ @camlTest__const_immstring_615, %then ]
+      %iftmp6 = phi i8* [ %iftmp, %merge ], [ @camlTest__const_immstring_708, %then ]
       ret i8* %iftmp6
     } |}]
 ;;

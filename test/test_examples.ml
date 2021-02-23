@@ -66,7 +66,7 @@ let%expect_test "hello world" =
     {|
     define ocamlcc i8* @camlTest__f_XXX(i8* %param_85) gc "ocaml" {
     entry:
-      %0 = call ocamlcc i8* bitcast (i8* @camlStdlib__print_endline_1181 to i8* (i8*)*)(i8* @camlTest__const_immstring_856)
+      %0 = call ocamlcc i8* bitcast (i8* @camlStdlib__print_endline_1181 to i8* (i8*)*)(i8* @camlTest__const_immstring_949)
       ret i8* %0
     } |}]
 ;;

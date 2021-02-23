@@ -23,19 +23,19 @@ let%expect_test "for loop" =
       %2 = trunc i64 %zext to i1
       br i1 %2, label %then, label %else
 
-    handler.1:                                        ; preds = %then3, %then
-      br label %exit.1
+    handler.2:                                        ; preds = %then3, %then
+      br label %exit.2
 
-    exit.1:                                           ; preds = %handler.1
+    exit.2:                                           ; preds = %handler.2
       ret i8* inttoptr (i64 1 to i8*)
 
     then:                                             ; preds = %entry
-      br label %handler.1
-
-    else:                                             ; preds = %entry
       br label %handler.2
 
-    handler.2:                                        ; preds = %else, %merge
+    else:                                             ; preds = %entry
+      br label %handler.3
+
+    handler.3:                                        ; preds = %else, %merge
       %load = bitcast i8* %f_87 to i8**
       %3 = load i8*, i8** %load, align 8
       %func_cast = bitcast i8* %3 to void (i8*, i8*)*
@@ -50,13 +50,13 @@ let%expect_test "for loop" =
       %7 = trunc i64 %zext2 to i1
       br i1 %7, label %then3, label %else4
 
-    then3:                                            ; preds = %handler.2
-      br label %handler.1
+    then3:                                            ; preds = %handler.3
+      br label %handler.2
 
-    else4:                                            ; preds = %handler.2
+    else4:                                            ; preds = %handler.3
       br label %merge
 
     merge:                                            ; preds = %else4
-      br label %handler.2
+      br label %handler.3
     } |}]
 ;;
