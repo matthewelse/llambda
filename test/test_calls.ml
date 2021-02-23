@@ -62,7 +62,7 @@ let%expect_test "return function" =
       store i64 3319, i64* %2, align 4
       %gep = getelementptr inbounds i8, i8* %1, i64 0
       %3 = bitcast i8* %gep to i8**
-      store i8* bitcast (i8* (i8*, i8*)* @camlTest__anon_fn_1028 to i8*), i8** %3, align 8
+      store i8* bitcast (i8* (i8*, i8*)* @camlTest__anon_fn_1110 to i8*), i8** %3, align 8
       %gep1 = getelementptr inbounds i8, i8* %1, i64 8
       %4 = bitcast i8* %gep1 to i64*
       store i64 3, i64* %4, align 4

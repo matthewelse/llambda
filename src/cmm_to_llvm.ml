@@ -404,16 +404,20 @@ module With_context (Context : Context) = struct
       let incoming =
         match block_terminator real_then_bb with
         | None ->
+          let kind = then_value.kind in
+          let then_value = llvm_value then_value in
           let (_ : llvalue) = build_br merge_bb builder in
-          [ then_value, real_then_bb ]
+          [ kind, then_value, real_then_bb ]
         | Some _ -> []
       in
       position_at_end real_else_bb builder;
       let incoming =
         match block_terminator real_else_bb with
         | None ->
+          let kind = else_value.kind in
+          let else_value = llvm_value else_value in
           let (_ : llvalue) = build_br merge_bb builder in
-          (else_value, real_else_bb) :: incoming
+          (kind, else_value, real_else_bb) :: incoming
         | Some _ -> incoming
       in
       (match incoming with
@@ -422,8 +426,8 @@ module With_context (Context : Context) = struct
         const_unit
       | _ ->
         let incoming =
-          List.filter_map incoming ~f:(fun (t, bb) ->
-              match t.kind with Void -> None | _ -> Some (llvm_value t, bb))
+          List.filter_map incoming ~f:(fun (kind, value, bb) ->
+              match kind with Void -> None | _ -> Some (value, bb))
         in
         position_at_end merge_bb builder;
         if List.is_empty incoming
@@ -443,8 +447,10 @@ module With_context (Context : Context) = struct
       let incoming =
         match block_terminator real_handler_bb with
         | None ->
+          let kind = handler_value.kind in
+          let handler_value = llvm_value handler_value in
           let (_ : llvalue) = build_br exit_bb builder in
-          [ handler_value, real_handler_bb ]
+          [ kind, handler_value, real_handler_bb ]
         | Some _ -> []
       in
       let body_value =
@@ -456,8 +462,10 @@ module With_context (Context : Context) = struct
       let incoming =
         match block_terminator real_body_bb with
         | None ->
+          let kind = body_value.kind in
+          let body_value = llvm_value body_value in
           let (_ : llvalue) = build_br exit_bb builder in
-          (body_value, real_body_bb) :: incoming
+          (kind, body_value, real_body_bb) :: incoming
         | Some _ -> incoming
       in
       (match incoming with
@@ -466,8 +474,8 @@ module With_context (Context : Context) = struct
         const_unit
       | _ ->
         let incoming =
-          List.filter_map incoming ~f:(fun (t, bb) ->
-              match t.kind with Void -> None | _ -> Some (llvm_value t, bb))
+          List.filter_map incoming ~f:(fun (kind, value, bb) ->
+              match kind with Void -> None | _ -> Some (value, bb))
         in
         position_at_end exit_bb builder;
         if List.is_empty incoming
@@ -503,8 +511,10 @@ module With_context (Context : Context) = struct
             let real_bb = insertion_block builder in
             match block_terminator real_bb with
             | None ->
+              let kind = result.kind in
+              let value = llvm_value result in
               let (_ : llvalue) = build_br exit_bb builder in
-              Some (result, real_bb)
+              Some (kind, value, real_bb)
             | Some _ -> None)
         |> Array.to_list
         |> List.filter_opt
@@ -515,7 +525,7 @@ module With_context (Context : Context) = struct
         const_unit
       | results ->
         let kind =
-          List.map results ~f:(fun (t, _) -> t.kind)
+          List.map results ~f:(fun (kind, _, _) -> kind)
           |> List.reduce_exn ~f:(fun l r ->
                  match l, r with
                  | Machtype l, Machtype r -> Machtype (Cmm.lub_component l r)
@@ -529,8 +539,8 @@ module With_context (Context : Context) = struct
                          (r : Var.Kind.t)])
         in
         let incoming =
-          List.filter_map results ~f:(fun (t, bb) ->
-              match t.kind with Void -> None | _ -> Some (llvm_value t, bb))
+          List.filter_map results ~f:(fun (kind, value, bb) ->
+              match kind with Void -> None | _ -> Some (value, bb))
         in
         if List.is_empty incoming
         then const_unit
@@ -561,7 +571,12 @@ module With_context (Context : Context) = struct
       let prev_stack = build_call Intrinsics.stacksave [||] "prev_stack" builder in
       let handler_ptr = build_alloca val_type "handler" builder in
       (* For debugging purposes *)
-      let (_ : llvalue) = build_store (const_int 0xF00FACE |> llvm_value) (build_pointercast handler_ptr (pointer_type int_type) "" builder) builder in 
+      let (_ : llvalue) =
+        build_store
+          (const_int 0xF00FACE |> llvm_value)
+          (build_pointercast handler_ptr (pointer_type int_type) "" builder)
+          builder
+      in
       (* eprint_s
         [%message "done some more stuff" (prev_stack : llvalue) (handler_ptr : llvalue)]; *)
       (* 2. allocate stack space for the old handler *)
