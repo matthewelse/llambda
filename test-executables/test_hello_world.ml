@@ -113,3 +113,103 @@ let%expect_test "allocations" =
         Some 1
         None |}])
 ;;
+
+let%expect_test "test minor heap" =
+  Deferred.List.iter configs ~f:(fun options ->
+      let%bind () =
+        run_code
+          ~options
+          [%str
+            let f l r =
+              let start = Gc.get_minor_free () in
+              let l' = Some l in
+              let middle = Gc.get_minor_free () in
+              let r' = Some r in
+              let end_ = Gc.get_minor_free () in
+              Printf.printf "start: %d, middle: %d, end: %d\n" start middle end_;
+              l', r'
+            ;;
+
+            let () =
+              Gc.minor ();
+              let (_ : _ * _) = f 100 900 in
+              let before_gc = Gc.get_minor_free () in
+              Gc.minor ();
+              let after_gc = Gc.get_minor_free () in
+              Printf.printf "before gc: %d, after gc: %d\n" before_gc after_gc;
+              ()
+            ;;]
+      in
+      [%expect
+        {|
+        start: 262144, middle: 262142, end: 262140
+        before gc: 262086, after gc: 262144 |}])
+;;
+
+let%expect_test "test minor heap (keep something alive)" =
+  Deferred.List.iter configs ~f:(fun options ->
+      let%bind () =
+        run_code
+          ~options
+          [%str
+            let print_counters () =
+              let minor, promoted, major = Gc.counters () in
+              Printf.printf
+                "minor: %.0f, promoted: %.0f, major: %.0f\n"
+                minor
+                promoted
+                major
+            ;;
+
+            let f l r =
+              let start = Gc.get_minor_free () in
+              let l' = Some l in
+              let middle = Gc.get_minor_free () in
+              let r' = Some r in
+              let end_ = Gc.get_minor_free () in
+              Printf.printf "start: %d, middle: %d, end: %d\n" start middle end_;
+              print_counters ();
+              l', r'
+            ;;
+
+            let[@cold] main () =
+              Gc.minor ();
+              print_counters ();
+              let x, _ = f 100 900 in
+              let before_gc = Gc.get_minor_free () in
+              print_counters ();
+              Gc.minor ();
+              let after_gc = Gc.get_minor_free () in
+              print_counters ();
+              Printf.printf "before gc: %d, after gc: %d\n" before_gc after_gc;
+              (match x with
+              | None -> print_endline "x = None"
+              | Some x -> Printf.printf "x = %d\n" x);
+              print_counters ()
+            ;;
+
+            let () = main ()]
+      in
+      [%expect
+        {|
+        (* CR expect_test: Collector ran multiple times with different outputs *)
+        =========================================================================
+        minor: 54, promoted: 54, major: 54
+        start: 262050, middle: 262048, end: 262046
+        minor: 203, promoted: 54, major: 54
+        minor: 300, promoted: 54, major: 54
+        minor: 394, promoted: 54, major: 54
+        before gc: 261898, after gc: 262144
+        x = 2387032
+        minor: 542, promoted: 54, major: 54
+
+        =========================================================================
+        minor: 54, promoted: 54, major: 54
+        start: 262050, middle: 262048, end: 262046
+        minor: 203, promoted: 54, major: 54
+        minor: 300, promoted: 54, major: 54
+        minor: 394, promoted: 56, major: 56
+        before gc: 261898, after gc: 262144
+        x = 100
+        minor: 542, promoted: 56, major: 56 |}])
+;;
