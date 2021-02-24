@@ -29,6 +29,8 @@ let%expect_test "try/with" =
       store i8* %domain_exn_ptr, i8** %old_handler, align 8
       %result = call ocamlcc i8* @llambda_setjmp(i8** %handler, i8* %domain_exn_ptr)
       %exception_was_raised = icmp eq i8* %result, null
+      %result_109 = alloca i8*, align 8
+      call void @llvm.gcroot(i8** %result_109, i8* null)
       br i1 %exception_was_raised, label %body, label %handler1
 
     body:                                             ; preds = %entry
@@ -48,19 +50,21 @@ let%expect_test "try/with" =
     merge:                                            ; preds = %merge3, %body
       %phi = phi i8* [ %iftmp, %merge3 ], [ %2, %body ]
       call void @llvm.stackrestore(i8* %prev_stack)
+      store i8* %phi, i8** %result_109, align 8
       %6 = ptrtoint i8* %m_107 to i64
       %binop = add i64 %6, -1
-      %7 = ptrtoint i8* %phi to i64
-      %binop4 = ashr i64 %7, 1
+      %7 = load i8*, i8** %result_109, align 8
+      %8 = ptrtoint i8* %7 to i64
+      %binop4 = ashr i64 %8, 1
       %binop5 = mul i64 %binop, %binop4
       %binop6 = add i64 %binop5, 1
       %promote = inttoptr i64 %binop6 to i8*
       ret i8* %promote
 
     then:                                             ; preds = %handler1
-      %8 = getelementptr i8, i8* %result, i64 8
-      %load2 = bitcast i8* %8 to i8**
-      %9 = load i8*, i8** %load2, align 8
+      %9 = getelementptr i8, i8* %result, i64 8
+      %load2 = bitcast i8* %9 to i8**
+      %10 = load i8*, i8** %load2, align 8
       br label %merge3
 
     else:                                             ; preds = %handler1
@@ -68,7 +72,7 @@ let%expect_test "try/with" =
       unreachable
 
     merge3:                                           ; preds = %then
-      %iftmp = phi i8* [ %9, %then ]
+      %iftmp = phi i8* [ %10, %then ]
       br label %merge
     }
 

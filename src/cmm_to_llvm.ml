@@ -296,12 +296,35 @@ module With_context (Context : Context) = struct
         { t with value = `Register value }
       | None -> raise_s [%message "Unknown variable" (name : string)])
     | Clet (var, value, body) ->
+      (* FIXME: unify this code with let_mut *)
       let var_name = Backend_var.With_provenance.var var |> Backend_var.unique_name in
       let var_value = compile_expression value in
-      with_var_in_env ~name:var_name ~value:var_value ~f:(fun () ->
-          compile_expression body)
+      let insertion_block = insertion_block builder in
+      let entry_bb = entry_block this_function in
+      (match block_terminator entry_bb with
+      | None -> position_at_end entry_bb builder
+      | Some terminator -> position_before terminator builder);
+      let var_ptr = Llvm.build_alloca (raw_type var_value) var_name builder in
+      (match var_value.kind with
+      | Void | Never_returns | Machtype Int | Machtype Addr | Machtype Float -> ()
+      | Machtype Val ->
+        (* Add a GC root for this thing. *)
+        let var_ptr = build_pointercast var_ptr (pointer_type val_type) "" builder in
+        let (_ : llvalue) =
+          build_call
+            Intrinsics.gcroot
+            [| var_ptr; const_pointer_null val_type |]
+            ""
+            builder
+        in
+        ());
+      position_at_end insertion_block builder;
+      let (_ : llvalue) = build_store (raw_value var_value) var_ptr builder in
+      with_var_in_env
+        ~name:var_name
+        ~value:{ value = `Stack var_ptr; kind = var_value.kind }
+        ~f:(fun () -> compile_expression body)
     | Clet_mut (var, machtype, value, body) ->
-      (* Maybe we should convert these to ssa? *)
       let var_name = Backend_var.With_provenance.var var |> Backend_var.unique_name in
       let var_value =
         compile_expression value
@@ -315,6 +338,19 @@ module With_context (Context : Context) = struct
       | None -> position_at_end entry_bb builder
       | Some terminator -> position_before terminator builder);
       let var_ptr = Llvm.build_alloca (raw_type var_value) var_name builder in
+      (match var_value.kind with
+      | Void | Never_returns | Machtype Int | Machtype Addr | Machtype Float -> ()
+      | Machtype Val ->
+        (* Add a GC root for this thing. *)
+        let var_ptr = build_pointercast var_ptr (pointer_type val_type) "" builder in
+        let (_ : llvalue) =
+          build_call
+            Intrinsics.gcroot
+            [| var_ptr; const_pointer_null val_type |]
+            ""
+            builder
+        in
+        ());
       position_at_end insertion_block builder;
       let (_ : llvalue) = build_store (raw_value var_value) var_ptr builder in
       with_var_in_env
