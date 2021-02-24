@@ -175,6 +175,7 @@ let%expect_test "test minor heap (keep something alive)" =
             let[@cold] main () =
               Gc.minor ();
               print_counters ();
+              (* We should probably have a GC root pointing at x, but we don't. *)
               let x, _ = f 100 900 in
               let before_gc = Gc.get_minor_free () in
               print_counters ();
