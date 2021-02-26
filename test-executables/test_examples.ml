@@ -193,6 +193,7 @@ let%expect_test "test minor heap (keep something alive)" =
 
             let () = main ()]
       in
+      (* FIXME: we need liveness analysis to get these two to match I think. *)
       [%expect
         {|
         (* CR expect_test: Collector ran multiple times with different outputs *)
