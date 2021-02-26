@@ -73,6 +73,10 @@ let%expect_test "return function" =
       %6 = bitcast i8* %gep2 to i64*
       store i64 %binop3, i64* %6, align 4
       %7 = load i8*, i8** %alloc_ptr, align 8
-      ret i8* %7
+      %set_of_closures_96 = alloca i8*, align 8
+      call void @llvm.gcroot(i8** %set_of_closures_96, i8* null)
+      store i8* %7, i8** %set_of_closures_96, align 8
+      %8 = load i8*, i8** %set_of_closures_96, align 8
+      ret i8* %8
     } |}]
 ;;

@@ -25,37 +25,54 @@ let%expect_test "post-order visit" =
       %0 = getelementptr i8, i8* %t_91, i64 -8
       %1 = load i8, i8* %0, align 1
       %zext = zext i8 %1 to i64
-      %2 = trunc i64 %zext to i1
-      br i1 %2, label %then, label %else
+      %switcher_101 = alloca i64, align 8
+      store i64 %zext, i64* %switcher_101, align 4
+      %2 = load i64, i64* %switcher_101, align 4
+      %3 = trunc i64 %2 to i1
+      %apply_arg_94 = alloca i8*, align 8
+      call void @llvm.gcroot(i8** %apply_arg_94, i8* null)
+      %sequence_96 = alloca i8*, align 8
+      call void @llvm.gcroot(i8** %sequence_96, i8* null)
+      %apply_arg_97 = alloca i8*, align 8
+      call void @llvm.gcroot(i8** %apply_arg_97, i8* null)
+      %sequence_99 = alloca i8*, align 8
+      call void @llvm.gcroot(i8** %sequence_99, i8* null)
+      br i1 %3, label %then, label %else
 
     then:                                             ; preds = %entry
-      %3 = getelementptr i8, i8* %t_91, i64 8
-      %load = bitcast i8* %3 to i8**
-      %4 = load i8*, i8** %load, align 8
-      %5 = call ocamlcc i8* @camlTest__postorder_XXX(i8* %f_92, i8* %4)
-      %6 = getelementptr i8, i8* %t_91, i64 16
-      %load1 = bitcast i8* %6 to i8**
-      %7 = load i8*, i8** %load1, align 8
-      %8 = call ocamlcc i8* @camlTest__postorder_XXX(i8* %f_92, i8* %7)
+      %4 = getelementptr i8, i8* %t_91, i64 8
+      %load = bitcast i8* %4 to i8**
+      %5 = load i8*, i8** %load, align 8
+      store i8* %5, i8** %apply_arg_94, align 8
+      %6 = load i8*, i8** %apply_arg_94, align 8
+      %7 = call ocamlcc i8* @camlTest__postorder_XXX(i8* %f_92, i8* %6)
+      store i8* %7, i8** %sequence_96, align 8
+      %8 = getelementptr i8, i8* %t_91, i64 16
+      %load1 = bitcast i8* %8 to i8**
+      %9 = load i8*, i8** %load1, align 8
+      store i8* %9, i8** %apply_arg_97, align 8
+      %10 = load i8*, i8** %apply_arg_97, align 8
+      %11 = call ocamlcc i8* @camlTest__postorder_XXX(i8* %f_92, i8* %10)
+      store i8* %11, i8** %sequence_99, align 8
       %load2 = bitcast i8* %f_92 to i8**
-      %9 = load i8*, i8** %load2, align 8
+      %12 = load i8*, i8** %load2, align 8
       %load3 = bitcast i8* %t_91 to i8**
-      %10 = load i8*, i8** %load3, align 8
-      %func_cast = bitcast i8* %9 to i8* (i8*, i8*)*
-      %11 = call ocamlcc i8* %func_cast(i8* %10, i8* %f_92)
+      %13 = load i8*, i8** %load3, align 8
+      %func_cast = bitcast i8* %12 to i8* (i8*, i8*)*
+      %14 = call ocamlcc i8* %func_cast(i8* %13, i8* %f_92)
       br label %merge
 
     else:                                             ; preds = %entry
       %load4 = bitcast i8* %f_92 to i8**
-      %12 = load i8*, i8** %load4, align 8
+      %15 = load i8*, i8** %load4, align 8
       %load5 = bitcast i8* %t_91 to i8**
-      %13 = load i8*, i8** %load5, align 8
-      %func_cast6 = bitcast i8* %12 to i8* (i8*, i8*)*
-      %14 = call ocamlcc i8* %func_cast6(i8* %13, i8* %f_92)
+      %16 = load i8*, i8** %load5, align 8
+      %func_cast6 = bitcast i8* %15 to i8* (i8*, i8*)*
+      %17 = call ocamlcc i8* %func_cast6(i8* %16, i8* %f_92)
       br label %merge
 
     merge:                                            ; preds = %else, %then
-      %iftmp = phi i8* [ %14, %else ], [ %11, %then ]
+      %iftmp = phi i8* [ %17, %else ], [ %14, %then ]
       ret i8* %iftmp
     } |}]
 ;;
@@ -93,14 +110,20 @@ let%expect_test "allocations" =
       %icmp = icmp ne i64 %0, 1
       %zext = zext i1 %icmp to i64
       %1 = trunc i64 %zext to i1
+      %sequence_98 = alloca i8*, align 8
+      call void @llvm.gcroot(i8** %sequence_98, i8* null)
+      %sequence_101 = alloca i8*, align 8
+      call void @llvm.gcroot(i8** %sequence_101, i8* null)
       br i1 %1, label %then, label %else
 
     then:                                             ; preds = %entry
       %2 = load i8*, i8** bitcast (i8* @camlStdlib__Pccall_1806 to i8**), align 8
       %3 = call ocamlcc i8* bitcast (i8* @camlStdlib__output_string_761 to i8* (i8*, i8*)*)(i8* %2, i8* @camlTest__const_immstring_1007)
+      store i8* %3, i8** %sequence_98, align 8
       %load = bitcast i8* %t_92 to i8**
       %4 = load i8*, i8** %load, align 8
       %5 = call ocamlcc i8* bitcast (i8* @camlStdlib__print_int_1157 to i8* (i8*)*)(i8* %4)
+      store i8* %5, i8** %sequence_101, align 8
       %6 = call ocamlcc i8* bitcast (i8* @camlStdlib__print_char_1131 to i8* (i64)*)(i64 21)
       br label %merge
 

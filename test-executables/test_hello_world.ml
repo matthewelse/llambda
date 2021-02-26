@@ -199,18 +199,18 @@ let%expect_test "test minor heap (keep something alive)" =
         start: 262050, middle: 262048, end: 262046
         minor: 203, promoted: 54, major: 54
         minor: 300, promoted: 54, major: 54
-        minor: 394, promoted: 54, major: 54
+        minor: 394, promoted: 56, major: 56
         before gc: 261898, after gc: 262144
-        x = 2387032
-        minor: 542, promoted: 54, major: 54
+        x = 100
+        minor: 542, promoted: 56, major: 56
 
         =========================================================================
         minor: 54, promoted: 54, major: 54
         start: 262050, middle: 262048, end: 262046
         minor: 203, promoted: 54, major: 54
         minor: 300, promoted: 54, major: 54
-        minor: 394, promoted: 56, major: 56
+        minor: 394, promoted: 77, major: 77
         before gc: 261898, after gc: 262144
         x = 100
-        minor: 542, promoted: 56, major: 56 |}])
+        minor: 542, promoted: 77, major: 77 |}])
 ;;

@@ -65,12 +65,16 @@ let%expect_test "division by constant" =
     entry:
       %0 = ptrtoint i8* %x_85 to i64
       %binop = ashr i64 %0, 1
-      %binop1 = lshr i64 %binop, 32
+      %dividend_88 = alloca i64, align 8
+      store i64 %binop, i64* %dividend_88, align 4
+      %1 = load i64, i64* %dividend_88, align 4
+      %binop1 = lshr i64 %1, 32
       %binop2 = mul i64 %binop1, 1717986918
       %binop3 = shl i64 %binop2, 32
       %binop4 = or i64 %binop3, 1
       %binop5 = ashr i64 %binop4, 2
-      %binop6 = lshr i64 %binop, 63
+      %2 = load i64, i64* %dividend_88, align 4
+      %binop6 = lshr i64 %2, 63
       %binop7 = add i64 %binop5, %binop6
       %binop8 = shl i64 %binop7, 1
       %binop9 = add i64 %binop8, 1
@@ -120,15 +124,20 @@ let%expect_test "modulo constant" =
     entry:
       %0 = ptrtoint i8* %x_85 to i64
       %binop = ashr i64 %0, 1
-      %binop1 = lshr i64 %binop, 32
+      %dividend_88 = alloca i64, align 8
+      store i64 %binop, i64* %dividend_88, align 4
+      %1 = load i64, i64* %dividend_88, align 4
+      %2 = load i64, i64* %dividend_88, align 4
+      %binop1 = lshr i64 %2, 32
       %binop2 = mul i64 %binop1, 1717986918
       %binop3 = shl i64 %binop2, 32
       %binop4 = or i64 %binop3, 1
       %binop5 = ashr i64 %binop4, 2
-      %binop6 = lshr i64 %binop, 63
+      %3 = load i64, i64* %dividend_88, align 4
+      %binop6 = lshr i64 %3, 63
       %binop7 = add i64 %binop5, %binop6
       %binop8 = mul i64 %binop7, 10
-      %binop9 = sub i64 %binop, %binop8
+      %binop9 = sub i64 %1, %binop8
       %binop10 = shl i64 %binop9, 1
       %binop11 = add i64 %binop10, 1
       %promote = inttoptr i64 %binop11 to i8*

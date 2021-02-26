@@ -304,7 +304,8 @@ module With_context (Context : Context) = struct
       (match block_terminator entry_bb with
       | None -> position_at_end entry_bb builder
       | Some terminator -> position_before terminator builder);
-      let var_ptr = Llvm.build_alloca (raw_type var_value) var_name builder in
+      let value = llvm_value var_value in
+      let var_ptr = Llvm.build_alloca (type_of value) var_name builder in
       (match var_value.kind with
       | Void | Never_returns | Machtype Int | Machtype Addr | Machtype Float -> ()
       | Machtype Val ->
@@ -319,7 +320,7 @@ module With_context (Context : Context) = struct
         in
         ());
       position_at_end insertion_block builder;
-      let (_ : llvalue) = build_store (raw_value var_value) var_ptr builder in
+      let (_ : llvalue) = build_store value var_ptr builder in
       with_var_in_env
         ~name:var_name
         ~value:{ value = `Stack var_ptr; kind = var_value.kind }
@@ -337,7 +338,8 @@ module With_context (Context : Context) = struct
       (match block_terminator entry_bb with
       | None -> position_at_end entry_bb builder
       | Some terminator -> position_before terminator builder);
-      let var_ptr = Llvm.build_alloca (raw_type var_value) var_name builder in
+      let value = llvm_value var_value in
+      let var_ptr = Llvm.build_alloca (type_of value) var_name builder in
       (match var_value.kind with
       | Void | Never_returns | Machtype Int | Machtype Addr | Machtype Float -> ()
       | Machtype Val ->
@@ -352,7 +354,7 @@ module With_context (Context : Context) = struct
         in
         ());
       position_at_end insertion_block builder;
-      let (_ : llvalue) = build_store (raw_value var_value) var_ptr builder in
+      let (_ : llvalue) = build_store value var_ptr builder in
       with_var_in_env
         ~name:var_name
         ~value:{ value = `Stack var_ptr; kind = var_value.kind }
