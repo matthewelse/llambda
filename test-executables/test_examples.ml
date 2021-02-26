@@ -214,3 +214,31 @@ let%expect_test "test minor heap (keep something alive)" =
         x = 100
         minor: 542, promoted: 77, major: 77 |}])
 ;;
+
+let%expect_test "test exceptions" =
+  Deferred.List.iter configs ~f:(fun options ->
+      let%bind () =
+        run_code
+          ~options
+          [%str
+            exception Fail of int
+
+            let will_this_thing_raise n =
+              if n < 0 then raise (Fail n) else Printf.printf "passed: %d\n" n
+            ;;
+
+            let[@cold] main n =
+              try will_this_thing_raise n with Fail n -> Printf.printf "failed: %d\n" n
+            ;;
+
+            let () =
+              let n = Sys.opaque_identity 10 in
+              main n;
+              let m = Sys.opaque_identity 0 in
+              main m
+            ;;]
+      in
+      [%expect {|
+        passed: 10
+        passed: 0 |}])
+;;

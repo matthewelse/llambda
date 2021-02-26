@@ -27,7 +27,7 @@ let%expect_test "try/with" =
       store i64 251722446, i64* %1, align 4
       %old_handler = alloca i8*, align 8
       store i8* %domain_exn_ptr, i8** %old_handler, align 8
-      %result = call ocamlcc i8* @llambda_setjmp(i8** %handler, i8* %domain_exn_ptr)
+      %result = call ocamlcc i8* @_llambda_setjmp(i8** %handler, i8* %domain_exn_ptr)
       %exception_was_raised = icmp eq i8* %result, null
       %result_109 = alloca i8*, align 8
       call void @llvm.gcroot(i8** %result_109, i8* null)
@@ -68,7 +68,7 @@ let%expect_test "try/with" =
       br label %merge3
 
     else:                                             ; preds = %handler1
-      call ocamlcc void @llambda_raise_exn(i8* %result)
+      call ocamlcc void @_llambda_raise_exn(i8* %result)
       unreachable
 
     merge3:                                           ; preds = %then
@@ -85,7 +85,7 @@ let%expect_test "try/with" =
       br i1 %1, label %then, label %else
 
     then:                                             ; preds = %entry
-      call ocamlcc void @llambda_raise_exn(i8* @camlTest__simplify_fv_90)
+      call ocamlcc void @_llambda_raise_exn(i8* @camlTest__simplify_fv_90)
       unreachable
 
     else:                                             ; preds = %entry

@@ -96,7 +96,7 @@ let%expect_test "division by variable" =
       br i1 %1, label %then, label %else
 
     then:                                             ; preds = %entry
-      call ocamlcc void @llambda_raise_exn(i8* @caml_exn_Division_by_zero)
+      call ocamlcc void @_llambda_raise_exn(i8* @caml_exn_Division_by_zero)
       unreachable
 
     else:                                             ; preds = %entry
@@ -158,7 +158,7 @@ let%expect_test "modulo variable" =
       br i1 %1, label %then, label %else
 
     then:                                             ; preds = %entry
-      call ocamlcc void @llambda_raise_exn(i8* @caml_exn_Division_by_zero)
+      call ocamlcc void @_llambda_raise_exn(i8* @caml_exn_Division_by_zero)
       unreachable
 
     else:                                             ; preds = %entry

@@ -68,7 +68,7 @@ module With_context (Context : Context) = struct
 
   let llambda_raise_exn =
     Llvm.declare_function
-      "llambda_raise_exn"
+      "_llambda_raise_exn"
       (function_type void_type [| val_type |])
       this_module
   ;;
@@ -76,7 +76,7 @@ module With_context (Context : Context) = struct
   let llambda_setjmp =
     (* FIXME melse: this should be annotated as returns_twice *)
     Llvm.declare_function
-      "llambda_setjmp"
+      "_llambda_setjmp"
       (function_type val_type [| pointer_type val_type; val_type |])
       this_module
   ;;
