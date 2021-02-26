@@ -44,7 +44,7 @@ module With_context (Context : Context) = struct
           (function_type int_type [| rtype |])
           this_module
       in
-      let value = Llvm.build_call func [| reg |] "read_r15" builder in
+      let value = Llvm.build_call func [| reg |] ("read_" ^ name) builder in
       Llvm.build_inttoptr value val_type "" builder
     ;;
 

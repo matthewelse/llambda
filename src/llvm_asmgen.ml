@@ -58,7 +58,7 @@ let assemble_llvm_ir ~llvm_flags ~ir_filename ~obj_filename () =
       ^ " -o "
       ^ Filename.quote obj_filename
       ^ " "
-      ^ ir_filename (* urgh LLVM uses the filename as the module name :( *))
+      ^ ir_filename)
   else result
 ;;
 
