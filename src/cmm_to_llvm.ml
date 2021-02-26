@@ -74,7 +74,7 @@ module With_context (Context : Context) = struct
   ;;
 
   let llambda_setjmp =
-    (* FIXME melse: this should be annotated as returns_twice *)
+    (* FIXME: this should be annotated as returns_twice *)
     Llvm.declare_function
       "_llambda_setjmp"
       (function_type val_type [| pointer_type val_type; val_type |])
@@ -93,7 +93,6 @@ module With_context (Context : Context) = struct
   ;;
 
   let const_pointer value =
-    (* print_s [%message "generating inttoptr" (value : int)]; *)
     { value = `Register (Llvm.const_inttoptr (Llvm.const_int int_type value) val_type)
     ; kind = Machtype Val
     }
@@ -132,22 +131,12 @@ module With_context (Context : Context) = struct
     | Machtype Float, Machtype Float ->
       Some t
     | Machtype (Addr | Val), Machtype Int ->
-      (* print_s
-        [%message
-          "promoting"
-            ~from:(t.kind : Cmm.machtype_component option)
-            ~from_irtype:(Llvm.type_of t.value : Ir_type.t)
-            ~to_:(new_machtype : Cmm.machtype_component option)
-            ~to_irtype:(val_type : Ir_type.t)]; *)
       let new_type = val_type in
       Some
         { kind = new_machtype
         ; value =
             (match t.value with
             | `Register value ->
-              (* eprint_s
-                [%message
-                  "warning: generating inttoptr" (msg : Sexp.t option) (value : llvalue)]; *)
               `Register (Llvm.build_inttoptr value new_type "promote" builder)
             | `Stack value ->
               `Stack
@@ -389,7 +378,9 @@ module With_context (Context : Context) = struct
         let (_ : llvalue) = build_store new_value ptr builder in
         const_unit)
     | Ctuple [] -> const_unit
-    | Ctuple _ -> raise_s [%message "TODO: Handle larger tuples?"]
+    | Ctuple _ ->
+      (* TODO: Consider supporting larger tuples? *)
+      raise_s [%message "Unable to support non-empty tuples." (expr : Cmm.expression)]
     | Cop (operation, args, debug_info) -> compile_operation operation args debug_info
     | Csequence (before, after) ->
       let (_ : t) = compile_expression before in
@@ -523,11 +514,16 @@ module With_context (Context : Context) = struct
           ; kind = Machtype Val
           })
     | Ccatch _ ->
-      raise_s [%message "TODO: complex catch statements" (expr : Cmm.expression)]
+      (* TODO: consider handling more complex catch statements *)
+      raise_s
+        [%message "Unable to handle complex catch statements." (expr : Cmm.expression)]
     | Cexit (index, []) ->
       let (_ : llvalue) = build_br (Int.Table.find_exn catches index) builder in
       const_unit
-    | Cexit _ -> raise_s [%message "TODO: complex exits" (expr : Cmm.expression)]
+    | Cexit _ ->
+      (* TODO: consider handling more complex exits.*)
+      raise_s
+        [%message "Unable to handle complex exit statements." (expr : Cmm.expression)]
     | Cswitch (value, ints, expressions, _) ->
       let match_value =
         compile_expression value |> cast_to_int_if_necessary_exn |> llvm_value
@@ -584,12 +580,6 @@ module With_context (Context : Context) = struct
         then const_unit
         else { value = `Register (build_phi incoming "phi" builder); kind })
     | Ctrywith (expr, var, handler, _) ->
-      (* eprint_s
-        [%message
-          "Ctrywith"
-            (expr : Cmm.expression)
-            (var : Backend_var.With_provenance.t)
-            (handler : Cmm.expression)]; *)
       (* The way we catch exceptions in llambda is super dumb, but is intended
          as a straight-forward way of implementing OCaml exceptions, without
          having to teach LLVM about OCaml's exception semantics. *)
@@ -602,9 +592,6 @@ module With_context (Context : Context) = struct
           "domain_exn_ptr"
           builder
       in
-      (* eprint_s
-        [%message
-          "allocate stack space" (domain_state_ptr : llvalue) (domain_exn_ptr : llvalue)]; *)
       (* 1. allocate stack space for the handler *)
       let prev_stack = build_call Intrinsics.stacksave [||] "prev_stack" builder in
       let handler_ptr = build_alloca val_type "handler" builder in
@@ -615,17 +602,9 @@ module With_context (Context : Context) = struct
           (build_pointercast handler_ptr (pointer_type int_type) "" builder)
           builder
       in
-      (* eprint_s
-        [%message "done some more stuff" (prev_stack : llvalue) (handler_ptr : llvalue)]; *)
       (* 2. allocate stack space for the old handler *)
       let old_handler_ptr = build_alloca val_type "old_handler" builder in
       let (_ : llvalue) = build_store domain_exn_ptr old_handler_ptr builder in
-      (* eprint_s
-        [%message
-          "build_call"
-            (llambda_setjmp : llvalue)
-            (handler_ptr : llvalue)
-            (domain_exn_ptr : llvalue)]; *)
       (* 3. call the doubly-returning function. this either returns null, or the exception *)
       let result =
         build_call llambda_setjmp [| handler_ptr; domain_exn_ptr |] "result" builder
@@ -634,7 +613,6 @@ module With_context (Context : Context) = struct
       let body_bb = append_block ctx "body" this_function in
       let handler_bb = append_block ctx "handler" this_function in
       let merge_bb = append_block ctx "merge" this_function in
-      (* eprint_s [%message "done even more stuff" (result : llvalue)]; *)
       (* 4. branch to the handler if the exception is returned *)
       let exception_was_not_raised =
         build_is_null result "exception_was_raised" builder
@@ -737,9 +715,6 @@ module With_context (Context : Context) = struct
           (function_type return_type (List.map args ~f:Llvm.type_of |> Array.of_list))
           this_module
       in
-      (* eprint_s
-        [%message
-          "extcall" "extcall" (args : llvalue list) (func : llvalue) (does_alloc : bool)]; *)
       if does_alloc
       then (
         let args = func :: args in
@@ -747,14 +722,6 @@ module With_context (Context : Context) = struct
           function_type return_type (List.map args ~f:Llvm.type_of |> Array.of_list)
         in
         let caml_c_call = Llvm.declare_function "caml_c_call" function_type this_module in
-        (* eprint_s
-          [%message
-            "extcall"
-              (caml_c_call_old : llvalue option) (* (args : llvalue list) *)
-              ~arg_types:(List.map args ~f:Llvm.type_of : lltype list)
-              (func : llvalue)
-              (does_alloc : bool)
-              (caml_c_call : llvalue)]; *)
         let call = build_call caml_c_call (Array.of_list args) "" builder in
         (* Epilogue to a c call - put r15 into *r14... *)
         let r14 = Intrinsics.read_register `r14 builder in
@@ -896,7 +863,7 @@ module With_context (Context : Context) = struct
       }
     | Ccmpa _, _ -> assert false
     | (Caddf | Csubf | Cmulf | Cdivf), [ left; right ] ->
-      (* TODO melse: the float operations generated here aren't equivalent to ocamlopt. *)
+      (* FIXME: the float operations generated here are probably not quite equivalent to ocamlopt. *)
       let left = compile_expression left in
       let right = compile_expression right in
       compile_float_binop ~operation left right
@@ -993,7 +960,6 @@ module With_context (Context : Context) = struct
         |> llvm_value
       in
       let ptr = build_pointercast ptr (pointer_type mem_lltype) "" builder in
-      (* eprint_s [%message "building store" (ptr : llvalue) (write_value : llvalue)]; *)
       let (_ : llvalue) = build_store write_value ptr builder in
       { (const_int 1) with kind = Void }
     | Cstore _, _ -> assert false
@@ -1035,9 +1001,6 @@ module With_context (Context : Context) = struct
         |> llvm_value
       in
       let (_ : llvalue) = build_store ptr ptr_ptr builder in
-      (* let (_ : llvalue) =
-        build_call Intrinsics.gcroot [| ptr_ptr; const_pointer_null val_type |] "" builder
-      in *)
       let tag_ptr = r15 in
       let tag_ptr =
         build_pointercast tag_ptr (pointer_type (type_of tag_value)) "" builder
@@ -1074,10 +1037,9 @@ module With_context (Context : Context) = struct
       let cond = build_icmp Slt index upper_bound "boundscheck" builder in
       let (_ : llvalue) = build_cond_br cond in_bounds out_of_bounds builder in
       position_at_end out_of_bounds builder;
-      (* TODO melse: throw an exception instead. *)
+      (* FIXME: throw an exception instead. *)
       let abort = declare_function "abort" (function_type void_type [||]) this_module in
       let (_ : llvalue) = build_call abort [||] "" builder in
-      (* let (_ : llvalue) = build_br out_of_bounds builder in *)
       let (_ : llvalue) = build_unreachable builder in
       position_at_end in_bounds builder;
       { (const_int 1) with kind = Void }
@@ -1093,7 +1055,6 @@ module With_context (Context : Context) = struct
       let call = build_call llambda_raise_exn [| exn_val |] "" builder in
       set_instruction_call_conv Declarations.ocaml_calling_convention call;
       { kind = Never_returns; value = `Register (build_unreachable builder) }
-      (* assert false *)
     | Craise _, _ -> assert false
   ;;
 end

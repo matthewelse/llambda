@@ -131,11 +131,13 @@ let compile_implementation
   let ctx = Llvm.global_context () in
   let impl_module = Llvm.create_module ctx (Ident.name program.module_ident) in
   let target_triple =
-    (* FIXME melse: Do something more principled here. e.g. call llvm-config --host-triple *)
+    (* FIXME: Do something more principled here. e.g. call llvm-config --host-triple *)
     match Ocaml_common.Config.system with
     | "macosx" -> "x86_64-apple-macosx10.15.0"
     | "linux" -> "x86_64-unknown-linux-gnu"
-    | _ -> Core.raise_s [%message "Unsupported system type. Maybe just add an extra target triple."]
+    | _ ->
+      Core.raise_s
+        [%message "Unsupported system type. Maybe just add an extra target triple."]
   in
   Llvm.set_target_triple target_triple impl_module;
   compile_unit ~llvm_flags irfile !keep_asm_file (prefixname ^ ext_obj) (fun () ->

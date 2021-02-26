@@ -5,6 +5,8 @@ open Ppxlib
 let loc = Location.none
 let configs = [ `Llvm "-O0"; `Llvm "-O1"; `Llvm "-O2"; `Llvm "-O3"; `Ocamlopt ]
 
+(* FIXME: things go downhill once we add -O3 to the driver (rather than as an LLVM flag *)
+
 let run_code ~options code =
   let%bind pwd = Unix.getcwd () in
   Expect_test_helpers_async.within_temp_dir (fun () ->
