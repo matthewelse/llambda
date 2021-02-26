@@ -237,11 +237,17 @@ let%expect_test "test exceptions" =
             let () =
               let n = Sys.opaque_identity 10 in
               main n;
-              let m = Sys.opaque_identity 0 in
+              let m = Sys.opaque_identity (-10) in
               main m
             ;;]
       in
-      [%expect {|
+      [%expect
+        {|
+        (* CR expect_test: Collector ran multiple times with different outputs *)
+        =========================================================================
+        ("Unclean exit" (Signal sigsegv))
+
+        =========================================================================
         passed: 10
-        passed: 0 |}])
+        failed: -10 |}])
 ;;
