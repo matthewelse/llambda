@@ -68,7 +68,7 @@ module With_context (Context : Context) = struct
 
   let llambda_raise_exn =
     Llvm.declare_function
-      "_llambda_raise_exn"
+      "llambda_raise_exn"
       (function_type void_type [| val_type |])
       this_module
   ;;
@@ -76,7 +76,7 @@ module With_context (Context : Context) = struct
   let llambda_setjmp =
     (* FIXME: this should be annotated as returns_twice *)
     Llvm.declare_function
-      "_llambda_setjmp"
+      "llambda_setjmp"
       (function_type val_type [| pointer_type val_type; val_type |])
       this_module
   ;;
@@ -585,7 +585,7 @@ module With_context (Context : Context) = struct
          having to teach LLVM about OCaml's exception semantics. *)
       let domain_state_ptr = Intrinsics.read_register `r14 builder in
       let domain_exn_ptr =
-        let offset = Ocaml_common.Domainstate.idx_of_field Domain_exception_pointer * 8 in
+        let offset = (Ocaml_common.Domainstate.idx_of_field Domain_exception_pointer) * 8 in
         build_in_bounds_gep
           domain_state_ptr
           [| const_int offset |> llvm_value |]
@@ -594,22 +594,14 @@ module With_context (Context : Context) = struct
       in
       (* 1. allocate stack space for the handler *)
       let prev_stack = build_call Intrinsics.stacksave [||] "prev_stack" builder in
-      let handler_ptr = build_alloca val_type "handler" builder in
+      let trap_ptr = build_alloca (array_type val_type 2) "trap_ptr" builder in
       (* For debugging purposes *)
-      let (_ : llvalue) =
-        build_store
-          (const_int 0xF00FACE |> llvm_value)
-          (build_pointercast handler_ptr (pointer_type int_type) "" builder)
-          builder
+      let trap_ptr =
+          (build_pointercast trap_ptr (pointer_type val_type) "" builder)
       in
-      (* 2. allocate stack space for the old handler *)
-      let old_handler_ptr = build_alloca val_type "old_handler" builder in
-      let (_ : llvalue) = build_store domain_exn_ptr old_handler_ptr builder in
-      (* 3. call the doubly-returning function. this either returns null, or the exception *)
       let result =
-        build_call llambda_setjmp [| handler_ptr; domain_exn_ptr |] "result" builder
+        build_call llambda_setjmp [| trap_ptr; domain_exn_ptr |] "result" builder
       in
-      set_instruction_call_conv Declarations.ocaml_calling_convention result;
       let body_bb = append_block ctx "body" this_function in
       let handler_bb = append_block ctx "handler" this_function in
       let merge_bb = append_block ctx "merge" this_function in

@@ -18,7 +18,7 @@ let type_of_function ctx (fundecl : Cmm.fundecl) =
 ;;
 
 let mangle_symbol_name esc s =
-  let prefix = match Ocaml_common.Config.system with "macosx" -> "_" | _ -> "" in
+  let prefix = "" in
   let mangled_name =
     String.concat_map s ~f:(function
         | ('A' .. 'Z' | 'a' .. 'z' | '0' .. '9' | '_') as c -> Char.to_string c
@@ -28,9 +28,10 @@ let mangle_symbol_name esc s =
 ;;
 
 let value_of_data_item (data_item : Cmm.data_item) =
+  let prefix = match Ocaml_common.Config.system with "macosx" -> "_" | _ -> "" in
   match data_item with
-  | Cdefine_symbol name -> mangle_symbol_name '$' name ^ ":"
-  | Cglobal_symbol name -> ".globl " ^ mangle_symbol_name '$' name
+  | Cdefine_symbol name -> prefix ^ mangle_symbol_name '$' name ^ ":"
+  | Cglobal_symbol name -> ".globl " ^ prefix ^ mangle_symbol_name '$' name
   | Cint8 value -> sprintf ".byte %d" value
   | Cint16 value -> sprintf ".word %d" value
   | Cint32 value -> sprintf !".long %{Nativeint}" value
@@ -40,7 +41,7 @@ let value_of_data_item (data_item : Cmm.data_item) =
     sprintf !".quad %{Int64}" int
   | Csingle _ -> assert false
   | Cstring literal -> sprintf !".ascii \"%s\"" literal
-  | Csymbol_address name -> sprintf !".quad %s" (mangle_symbol_name '$' name)
+  | Csymbol_address name -> sprintf !".quad %s%s" prefix (mangle_symbol_name '$' name)
   | Calign n -> sprintf !".align %d" n
   | Cskip n -> sprintf !".space %d" n
 ;;
@@ -73,6 +74,7 @@ _llambda_raise_exn:
   popq %r11
   jmp *%r11
 
+// FIXME: update this comment.
 // takes two pointers as arguments - one for the 'handler' address, and
 // one for the old handler thing
 // 
@@ -91,17 +93,12 @@ _llambda_raise_exn:
 // a go
 .text
 _llambda_setjmp:
-  // put the return address of this function in pointer provided as this
-  // function's first argument
-  // FIXME: There's a bug in the exception-thrown case. I assume this is the problem.
-  mov (%rsp),%rdi
-  mov %rdi,(%rax)
-  // put the old stack pointer into *rbx
-  mov %rsp,%rax
-  add $8,%rax
-  mov %rax,(%rbx)
-  // return zero the first time round
-  xor %rax,%rax
+  mov (%rsp),%r11 // push handler (this function's return address)
+  mov %r11,8(%rdi)
+  mov (%rsi),%r11 // push old handler
+  mov %r11,(%rdi)
+  mov %rdi,(%rsi) // mov (old rsp) domain_exn_pointer
+  xor %eax,%eax
   ret
   |}
   in
@@ -197,17 +194,7 @@ _llambda_setjmp:
                ;;
              end)
            in
-           (* let initial_stack =
-             build_call Cmm_to_llvm.Intrinsics.stacksave [||] "" builder
-           in *)
            let ret_val = Cmm_to_llvm.compile_expression cfundecl.fun_body in
-           (* let (_ : llvalue) =
-             build_call
-               Cmm_to_llvm.Intrinsics.stackrestore
-               [| initial_stack |]
-               ""
-               builder
-           in *)
            build_ret
              (Cmm_to_llvm.promote_value_if_necessary_exn
                 ~msg:[%message "promoting return value"]
