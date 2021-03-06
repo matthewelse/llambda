@@ -35,11 +35,6 @@ module type Cmm_to_llvm = sig
   [@@deriving sexp_of]
 
   module With_context (S : Context) : sig
-    module Intrinsics : sig
-      val stacksave : llvalue
-      val stackrestore : llvalue
-    end
-
     val compile_expression : Cmm.expression -> t
     val promote_value_if_necessary_exn : ?msg:Sexp.t -> new_machtype:Var.Kind.t -> t -> t
     val llvm_value : t -> llvalue

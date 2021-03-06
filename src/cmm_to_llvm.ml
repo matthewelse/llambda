@@ -13,17 +13,6 @@ module With_context (Context : Context) = struct
   let void_type = void_type ctx
 
   module Intrinsics = struct
-    let stacksave =
-      Llvm.declare_function "llvm.stacksave" (function_type val_type [||]) this_module
-    ;;
-
-    let stackrestore =
-      Llvm.declare_function
-        "llvm.stackrestore"
-        (function_type void_type [| val_type |])
-        this_module
-    ;;
-
     let gcroot =
       Llvm.declare_function
         "llvm.gcroot"
@@ -66,11 +55,13 @@ module With_context (Context : Context) = struct
     ;;
   end
 
-  let llambda_raise_exn =
-    Llvm.declare_function
-      "llambda_raise_exn"
-      (function_type void_type [| val_type |])
-      this_module
+  let raise_exn =
+    const_inline_asm
+      (function_type void_type [| val_type; val_type |])
+      ~assembly:"movq ($1),%rsp; popq ($1); popq %r11; jmp *%r11"
+      ~constraints:"{rax},r"
+      ~has_side_effects:true
+      ~should_align_stack:false
   ;;
 
   let type_of_kind kind = Var.Kind.lltype_of_t ~ctx kind

@@ -65,16 +65,6 @@ let emit ~ctx ~this_module (cmm : Cmm.phrase list) =
         | Cdata items -> ".data" :: List.map items ~f:value_of_data_item)
     |> String.concat ~sep:"\n"
   in
-  let helpers =
-    {|
-.text
-_llambda_raise_exn:
-  movq 16(%r14),%rsp
-  popq 16(%r14)
-  popq %r11
-  jmp *%r11
-  |}
-  in
   List.iter cmm ~f:(function
       | Cfunction _ -> ()
       | Cdata items ->
@@ -83,7 +73,7 @@ _llambda_raise_exn:
               let (_ : llvalue) = Llvm.declare_global (i8_type ctx) name this_module in
               ()
             | _ -> ()));
-  set_module_inline_asm this_module (globals ^ helpers);
+  set_module_inline_asm this_module globals;
   List.iter cmm ~f:(function
       | Cfunction cfundecl ->
         (* print_s [%message "compiling function" (cfundecl.fun_name : string)]; *)
