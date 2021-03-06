@@ -584,17 +584,17 @@ module With_context (Context : Context) = struct
           "domain_exn_ptr"
           builder
       in
-      let (push_handler : llvalue) =
+      let push_handler =
         const_inline_asm
-          void_type
-          ~assembly:"push ${1:c}; push ($0)"
-          ~constraints:"r,X"
+          (function_type void_type [| val_type; val_type |])
+          ~assembly:"lea $1(%rip),%r11; push %r11; push ($0); mov %rsp,($0)"
+          ~constraints:"r,X,~{r11}"
           ~has_side_effects:true (* I think this needs to be true... *)
           ~should_align_stack:false
       in
       let pop_handler =
         const_inline_asm
-          void_type
+          (function_type void_type [| val_type |])
           ~assembly:"pop ($0); add $$8,%rsp"
           ~constraints:"r"
           ~has_side_effects:true
@@ -619,20 +619,20 @@ module With_context (Context : Context) = struct
       let incoming =
         match block_terminator real_body_bb with
         | None ->
-          let (_ : llvalue) = build_call pop_handler [||] "" builder in
+          let (_ : llvalue) = build_call pop_handler [| domain_exn_ptr |] "" builder in
           let (_ : llvalue) = build_br merge_bb builder in
           [ good_case, real_body_bb ]
         | Some terminator ->
           position_before terminator builder;
           (* FIXME: This probably actually needs to happen before any exit nodes... *)
-          let (_ : llvalue) = build_call pop_handler [||] "" builder in
+          let (_ : llvalue) = build_call pop_handler [| domain_exn_ptr |] "" builder in
           []
       in
       (* 6. compile the handler *)
       position_at_end handler_bb builder;
       let get_exn =
         const_inline_asm
-          void_type
+          (function_type val_type [||])
           ~assembly:""
           ~constraints:"={rax}"
           ~has_side_effects:false
