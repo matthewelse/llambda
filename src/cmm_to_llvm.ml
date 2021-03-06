@@ -73,14 +73,6 @@ module With_context (Context : Context) = struct
       this_module
   ;;
 
-  let llambda_setjmp =
-    (* FIXME: this should be annotated as returns_twice *)
-    Llvm.declare_function
-      "llambda_setjmp"
-      (function_type val_type [| pointer_type val_type; val_type |])
-      this_module
-  ;;
-
   let type_of_kind kind = Var.Kind.lltype_of_t ~ctx kind
   let const_unit = { value = `Register (Llvm.const_int int_type 1); kind = Void }
 
@@ -585,32 +577,40 @@ module With_context (Context : Context) = struct
          having to teach LLVM about OCaml's exception semantics. *)
       let domain_state_ptr = Intrinsics.read_register `r14 builder in
       let domain_exn_ptr =
-        let offset = (Ocaml_common.Domainstate.idx_of_field Domain_exception_pointer) * 8 in
+        let offset = Ocaml_common.Domainstate.idx_of_field Domain_exception_pointer * 8 in
         build_in_bounds_gep
           domain_state_ptr
           [| const_int offset |> llvm_value |]
           "domain_exn_ptr"
           builder
       in
-      (* 1. allocate stack space for the handler *)
-      let prev_stack = build_call Intrinsics.stacksave [||] "prev_stack" builder in
-      let trap_ptr = build_alloca (array_type val_type 2) "trap_ptr" builder in
-      (* For debugging purposes *)
-      let trap_ptr =
-          (build_pointercast trap_ptr (pointer_type val_type) "" builder)
+      let (push_handler : llvalue) =
+        const_inline_asm
+          void_type
+          ~assembly:"push ${1:c}; push ($0)"
+          ~constraints:"r,X"
+          ~has_side_effects:true (* I think this needs to be true... *)
+          ~should_align_stack:false
       in
-      let result =
-        build_call llambda_setjmp [| trap_ptr; domain_exn_ptr |] "result" builder
+      let pop_handler =
+        const_inline_asm
+          void_type
+          ~assembly:"pop ($0); add $$8,%rsp"
+          ~constraints:"r"
+          ~has_side_effects:true
+          ~should_align_stack:false
       in
       let body_bb = append_block ctx "body" this_function in
       let handler_bb = append_block ctx "handler" this_function in
       let merge_bb = append_block ctx "merge" this_function in
-      (* 4. branch to the handler if the exception is returned *)
-      let exception_was_not_raised =
-        build_is_null result "exception_was_raised" builder
-      in
       let (_ : llvalue) =
-        build_cond_br exception_was_not_raised body_bb handler_bb builder
+        build_callbr
+          push_handler
+          body_bb
+          [| domain_exn_ptr; block_address this_function handler_bb |]
+          [| handler_bb |]
+          ""
+          builder
       in
       (* 5. compile the bit between try and with *)
       position_at_end body_bb builder;
@@ -619,19 +619,30 @@ module With_context (Context : Context) = struct
       let incoming =
         match block_terminator real_body_bb with
         | None ->
+          let (_ : llvalue) = build_call pop_handler [||] "" builder in
           let (_ : llvalue) = build_br merge_bb builder in
           [ good_case, real_body_bb ]
-        | Some _ -> []
+        | Some terminator ->
+          position_before terminator builder;
+          (* FIXME: This probably actually needs to happen before any exit nodes... *)
+          let (_ : llvalue) = build_call pop_handler [||] "" builder in
+          []
       in
       (* 6. compile the handler *)
       position_at_end handler_bb builder;
-      let (_ : llvalue) =
-        build_call Intrinsics.stackrestore [| prev_stack |] "" builder
+      let get_exn =
+        const_inline_asm
+          void_type
+          ~assembly:""
+          ~constraints:"={rax}"
+          ~has_side_effects:false
+          ~should_align_stack:false
       in
+      let exn = build_call get_exn [||] "exn" builder in
       let bad_case =
         with_var_in_env
           ~name:(Backend_var.unique_name (Backend_var.With_provenance.var var))
-          ~value:{ value = `Register result; kind = Machtype Val }
+          ~value:{ value = `Register exn; kind = Machtype Val }
           ~f:(fun () -> compile_expression handler)
       in
       let real_handler_bb = insertion_block builder in
@@ -668,18 +679,12 @@ module With_context (Context : Context) = struct
                   , bb ))
         in
         position_at_end merge_bb builder;
-        let result =
-          if List.is_empty incoming
-          then const_unit
-          else
-            { value = `Register (build_phi incoming [%string "phi"] builder)
-            ; kind = Machtype Val
-            }
-        in
-        let (_ : llvalue) =
-          build_call Intrinsics.stackrestore [| prev_stack |] "" builder
-        in
-        result)
+        if List.is_empty incoming
+        then const_unit
+        else
+          { value = `Register (build_phi incoming [%string "phi"] builder)
+          ; kind = Machtype Val
+          })
 
   and compile_operation operation args (_ : Ocaml_common.Debuginfo.t) =
     match operation, args with
