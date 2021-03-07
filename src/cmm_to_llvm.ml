@@ -563,9 +563,10 @@ module With_context (Context : Context) = struct
         then const_unit
         else { value = `Register (build_phi incoming "phi" builder); kind })
     | Ctrywith (expr, var, handler, _) ->
-      (* The way we catch exceptions in llambda is super dumb, but is intended
-         as a straight-forward way of implementing OCaml exceptions, without
-         having to teach LLVM about OCaml's exception semantics. *)
+      (* This is a sketchy implementation of exception handling that avoids
+         having to teach LLVM about OCaml-style exceptions. It most likely
+         breaks GC roots inside the try with, since we don't tell LLVM about the
+         push and pop operations. Maybe in the future we can just use alloca? *)
       let domain_state_ptr = Intrinsics.read_register `r14 builder in
       let domain_exn_ptr =
         let offset = Ocaml_common.Domainstate.idx_of_field Domain_exception_pointer * 8 in
@@ -580,7 +581,7 @@ module With_context (Context : Context) = struct
           (function_type void_type [| val_type; val_type |])
           ~assembly:"lea $1(%rip),%r11; push %r11; push ($0); mov %rsp,($0)"
           ~constraints:"r,X,~{r11}"
-          ~has_side_effects:true (* I think this needs to be true... *)
+          ~has_side_effects:true 
           ~should_align_stack:false
       in
       let pop_handler =
@@ -591,10 +592,51 @@ module With_context (Context : Context) = struct
           ~has_side_effects:true
           ~should_align_stack:false
       in
+      (*
+        We want to end up with something like this
+
+        {v
+            [entry]
+               |      
+               | <- push handler
+               |
+             .body  ======raise========> handler_bb
+               |                             |
+               | <- pop handler              |
+               |                             |
+             .merge <-----------------------/
+        v}
+
+        FIXME: Note that we don't currently model situations like:
+
+        {v
+          for (int i = 0; i < n; i++) {
+            do_something_outside_the_handler();
+            try {
+              int x = do_something();
+              if (x == 0) {
+                continue;
+              } else {
+                do_something_else();
+              }
+            } catch {
+              do_some_cleanup();
+            }
+          }
+        v}
+
+        We should pop the handler just before continue'ing to the start of the
+        loop again. Fortunately, this would be a fairly unusual (impossible?)
+        thing to do in OCaml, so for the time being I'll leave it.
+      *)
       let body_bb = append_block ctx "body" this_function in
       let handler_bb = append_block ctx "handler" this_function in
       let merge_bb = append_block ctx "merge" this_function in
       let (_ : llvalue) =
+        (* We kind of abuse LLVM's callbr instruction here. It's intended to
+           allow assembly code to branch to LLVM labels, but here we store the
+           label on the stack, and branch to it later. The semantics are similar
+           enough that it doesn't break too many things. *)
         build_callbr
           push_handler
           body_bb
@@ -603,11 +645,12 @@ module With_context (Context : Context) = struct
           ""
           builder
       in
-      (* 5. compile the bit between try and with *)
+      (* compile the bit between try and with *)
       position_at_end body_bb builder;
       let good_case = compile_expression expr in
       let real_body_bb = insertion_block builder in
       let incoming =
+        (* pop the handler, then continue *)
         match block_terminator real_body_bb with
         | None ->
           let (_ : llvalue) = build_call pop_handler [| domain_exn_ptr |] "" builder in
@@ -615,11 +658,12 @@ module With_context (Context : Context) = struct
           [ good_case, real_body_bb ]
         | Some terminator ->
           position_before terminator builder;
-          (* FIXME: This probably actually needs to happen before any exit nodes... *)
+          (* FIXME: This probably actually needs to happen before any exit
+             nodes... I don't know how to find them though.  *)
           let (_ : llvalue) = build_call pop_handler [| domain_exn_ptr |] "" builder in
           []
       in
-      (* 6. compile the handler *)
+      (* compile the handler *)
       position_at_end handler_bb builder;
       let get_exn =
         const_inline_asm
@@ -630,7 +674,7 @@ module With_context (Context : Context) = struct
           ~should_align_stack:false
       in
       let exn = build_call get_exn [||] "exn" builder in
-      let bad_case =
+      let handler_result =
         with_var_in_env
           ~name:(Backend_var.unique_name (Backend_var.With_provenance.var var))
           ~value:{ value = `Register exn; kind = Machtype Val }
@@ -641,7 +685,7 @@ module With_context (Context : Context) = struct
         match block_terminator real_handler_bb with
         | None ->
           let (_ : llvalue) = build_br merge_bb builder in
-          (bad_case, real_handler_bb) :: incoming
+          (handler_result, real_handler_bb) :: incoming
         | Some _ -> incoming
       in
       (match incoming with
