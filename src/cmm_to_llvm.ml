@@ -1032,7 +1032,7 @@ module With_context (Context : Context) = struct
       position_at_end in_bounds builder;
       { (const_int 1) with kind = Void }
     | Ccheckbound, _ -> assert false
-    | Craise _, [ exn ] ->
+    | Craise raise_kind, [ exn ] ->
       let exn_val =
         compile_expression exn
         |> promote_value_if_necessary_exn
@@ -1040,9 +1040,47 @@ module With_context (Context : Context) = struct
              ~new_machtype:(Machtype Val)
         |> llvm_value
       in
-      let call = build_call llambda_raise_exn [| exn_val |] "" builder in
-      set_instruction_call_conv Declarations.ocaml_calling_convention call;
-      { kind = Never_returns; value = `Register (build_unreachable builder) }
+      let domain_state_ptr = Intrinsics.read_register `r14 builder in
+      let caml_raise_exn =
+        declare_function
+          "caml_raise_exn"
+          (function_type void_type [| val_type |])
+          this_module
+      in
+      (match raise_kind with
+      | Raise_notrace ->
+        let domain_exn_ptr =
+          let offset =
+            Ocaml_common.Domainstate.idx_of_field Domain_exception_pointer * 8
+          in
+          build_in_bounds_gep
+            domain_state_ptr
+            [| const_int offset |> llvm_value |]
+            "domain_exn_ptr"
+            builder
+        in
+        let call = build_call raise_exn [| exn_val; domain_exn_ptr |] "" builder in
+        set_instruction_call_conv Declarations.ocaml_calling_convention call;
+        { kind = Never_returns; value = `Register (build_unreachable builder) }
+      | Raise_reraise ->
+        let call = build_call caml_raise_exn [| exn_val |] "" builder in
+        set_instruction_call_conv Declarations.ocaml_calling_convention call;
+        { kind = Never_returns; value = `Register (build_unreachable builder) }
+      | Raise_regular ->
+        let domain_backtrace_ptr =
+          let offset = Ocaml_common.Domainstate.idx_of_field Domain_backtrace_pos * 8 in
+          build_in_bounds_gep
+            domain_state_ptr
+            [| const_int offset |> llvm_value |]
+            "domain_exn_ptr"
+            builder
+        in
+        let (_ : llvalue) =
+          build_store (const_int 0 |> llvm_value) domain_backtrace_ptr builder
+        in
+        let call = build_call caml_raise_exn [| exn_val |] "" builder in
+        set_instruction_call_conv Declarations.ocaml_calling_convention call;
+        { kind = Never_returns; value = `Register (build_unreachable builder) })
     | Craise _, _ -> assert false
   ;;
 end

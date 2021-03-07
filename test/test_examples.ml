@@ -103,7 +103,8 @@ let%expect_test "allocations" =
           print_int x;
           print_char '\n'
       ;;];
-  [%expect {|
+  [%expect
+    {|
     define ocamlcc i8* @camlTest__print_int_option_XXX(i8* %t_92) gc "ocaml" {
     entry:
       %0 = ptrtoint i8* %t_92 to i64

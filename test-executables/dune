@@ -1,6 +1,7 @@
 (library
  (name llambda_test_executables)
  (libraries core expect_test_helpers_async llambda ppxlib)
- (inline_tests (deps ../bin/driver.exe))
+ (inline_tests
+  (deps ../bin/driver.exe))
  (preprocess
   (pps ppx_jane ppx_inline_test ppxlib.metaquot)))
