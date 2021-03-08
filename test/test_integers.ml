@@ -96,14 +96,17 @@ let%expect_test "division by variable" =
       br i1 %1, label %then, label %else
 
     then:                                             ; preds = %entry
-      call ocamlcc void @_llambda_raise_exn(i8* @caml_exn_Division_by_zero)
+      %read_r14 = call i64 @llvm.read_register.i64(metadata !0)
+      %2 = inttoptr i64 %read_r14 to i8*
+      %domain_exn_ptr = getelementptr inbounds i8, i8* %2, i64 16
+      call ocamlcc void asm sideeffect "movq ($1),%rsp; popq ($1); popq %r11; jmp *%r11", "{rax},r"(i8* @caml_exn_Division_by_zero, i8* %domain_exn_ptr)
       unreachable
 
     else:                                             ; preds = %entry
-      %2 = ptrtoint i8* %x_87 to i64
-      %binop = ashr i64 %2, 1
-      %3 = ptrtoint i8* %y_86 to i64
-      %binop1 = ashr i64 %3, 1
+      %3 = ptrtoint i8* %x_87 to i64
+      %binop = ashr i64 %3, 1
+      %4 = ptrtoint i8* %y_86 to i64
+      %binop1 = ashr i64 %4, 1
       %binop2 = sdiv i64 %binop, %binop1
       %binop3 = shl i64 %binop2, 1
       %binop4 = add i64 %binop3, 1
@@ -158,14 +161,17 @@ let%expect_test "modulo variable" =
       br i1 %1, label %then, label %else
 
     then:                                             ; preds = %entry
-      call ocamlcc void @_llambda_raise_exn(i8* @caml_exn_Division_by_zero)
+      %read_r14 = call i64 @llvm.read_register.i64(metadata !0)
+      %2 = inttoptr i64 %read_r14 to i8*
+      %domain_exn_ptr = getelementptr inbounds i8, i8* %2, i64 16
+      call ocamlcc void asm sideeffect "movq ($1),%rsp; popq ($1); popq %r11; jmp *%r11", "{rax},r"(i8* @caml_exn_Division_by_zero, i8* %domain_exn_ptr)
       unreachable
 
     else:                                             ; preds = %entry
-      %2 = ptrtoint i8* %x_87 to i64
-      %binop = ashr i64 %2, 1
-      %3 = ptrtoint i8* %y_86 to i64
-      %binop1 = ashr i64 %3, 1
+      %3 = ptrtoint i8* %x_87 to i64
+      %binop = ashr i64 %3, 1
+      %4 = ptrtoint i8* %y_86 to i64
+      %binop1 = ashr i64 %4, 1
       %binop2 = srem i64 %binop, %binop1
       %binop3 = shl i64 %binop2, 1
       %binop4 = add i64 %binop3, 1
