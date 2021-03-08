@@ -1,0 +1,5 @@
+(library
+ (name llambda_typedllvm)
+ (libraries core ctypes llvm)
+ (preprocess
+  (pps ppx_jane)))
