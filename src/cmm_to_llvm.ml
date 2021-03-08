@@ -3,61 +3,65 @@
 open! Core
 open! Import
 include Cmm_to_llvm_intf
+module Typed_llvm = Llambda_typedllvm
 
 module With_context (Context : Context) = struct
   open Context
+  open Typed_llvm
 
-  let int_type = i64_type ctx
-  let val_type = pointer_type (i8_type ctx)
-  let float_type = double_type ctx
-  let void_type = void_type ctx
+  let int_type = Ltype.int_type ctx I64
+  let val_type = Ltype.pointer_type (Ltype.int_type ctx I8)
+  let float_type = Ltype.float_type ctx Double
+  let void_type = Ltype.void_type ctx
 
   module Intrinsics = struct
     let gcroot =
-      Llvm.declare_function
-        "llvm.gcroot"
-        (function_type void_type [| pointer_type val_type; val_type |])
-        this_module
+      Value.declare_function
+        ~name:"llvm.gcroot"
+        ~typ:Ltype.Func.(Ltype.pointer_type val_type @-> val_type @-> returns void_type)
+        ~module_:this_module
     ;;
 
     let read_register reg builder =
       let name = match reg with `r15 -> "r15" | `r14 -> "r14" in
       let reg =
-        let reg_md = mdstring ctx name in
-        mdnode ctx [| reg_md |]
+        let reg_md = Value.mdstring ~ctx name in
+        Value.mdnode ~ctx [ reg_md ]
       in
-      let rtype = type_of reg in
       let func =
-        Llvm.declare_function
-          "llvm.read_register.i64"
-          (function_type int_type [| rtype |])
-          this_module
+        Value.declare_function
+          ~name:"llvm.read_register.i64"
+          ~typ:Ltype.Func.(Ltype.mdnode ctx (Ltype.mdstring ctx) @-> returns int_type)
+          ~module_:this_module
       in
-      let value = Llvm.build_call func [| reg |] ("read_" ^ name) builder in
-      Llvm.build_inttoptr value val_type "" builder
+      let value =
+        Value.build_call func Value.Args.(reg @: nil) ("read_" ^ name) builder
+      in
+      Value.build_inttoptr value ~ptr_type:val_type ~name:"" ~builder
     ;;
 
     let write_register reg value builder =
       let name = match reg with `r15 -> "r15" in
       let reg =
-        let reg_md = mdstring ctx name in
-        mdnode ctx [| reg_md |]
+        let reg_md = Value.mdstring ~ctx name in
+        Value.mdnode ~ctx [ reg_md ]
       in
-      let value = build_ptrtoint value int_type "" builder in
-      let rtype = type_of reg in
+      let value = Value.build_ptrtoint value ~name:"" ~builder in
       let func =
-        Llvm.declare_function
-          "llvm.write_register.i64"
-          (function_type void_type [| rtype; int_type |])
-          this_module
+        Value.declare_function
+          ~name:"llvm.write_register.i64"
+          ~typ:
+            Ltype.Func.(
+              Ltype.mdnode ctx (Ltype.mdstring ctx) @-> int_type @-> returns void_type)
+          ~module_:this_module
       in
-      Llvm.build_call func [| reg; value |] "" builder
+      Value.build_call func Value.Args.(reg @: value @: nil) "" builder
     ;;
   end
 
   let raise_exn =
-    const_inline_asm
-      (function_type void_type [| val_type; val_type |])
+    Value.const_inline_asm
+      ~typ:Ltype.Func.(val_type @-> val_type @-> returns void_type)
       ~assembly:"movq ($1),%rsp; popq ($1); popq %r11; jmp *%r11"
       ~constraints:"{rax},r"
       ~has_side_effects:true
@@ -65,24 +69,41 @@ module With_context (Context : Context) = struct
   ;;
 
   let type_of_kind kind = Var.Kind.lltype_of_t ~ctx kind
-  let const_unit = { value = `Register (Llvm.const_int int_type 1); kind = Void }
+  let unwrap v = Value.to_llvm v
+  let unwrap_fn f = Value.fn_to_llvm f
+  let unwrap_type t = Ltype.to_llvm t
 
-  let const_int value =
-    { value = `Register (Llvm.const_int int_type value); kind = Machtype Int }
+  (* Provide ourselves with ways to cheat while we make things more typeful. *)
+  let wrap v = Value.unsafe_of_llvm v
+  (* let wrap_type t = Value.unsafe_of_llvm t *)
+
+  let const_unit =
+    { value = `Register (Value.const_int ctx I64 1 |> unwrap); kind = Void }
   ;;
 
-  let const_int64 ?(signed = true) value =
-    { value = `Register (Llvm.const_of_int64 int_type value signed); kind = Machtype Int }
+  let const_int value =
+    { value = `Register (Value.const_int ctx I64 value |> unwrap); kind = Machtype Int }
+  ;;
+
+  let const_int64 ?signed value =
+    { value = `Register (Value.const_int64 ctx I64 value ?signed |> unwrap)
+    ; kind = Machtype Int
+    }
   ;;
 
   let const_pointer value =
-    { value = `Register (Llvm.const_inttoptr (Llvm.const_int int_type value) val_type)
+    { value =
+        `Register
+          (Value.const_inttoptr (Value.const_int ctx I64 value) ~ptr_type:val_type
+          |> unwrap)
     ; kind = Machtype Val
     }
   ;;
 
   let const_float value =
-    { value = `Register (Llvm.const_float float_type value); kind = Machtype Float }
+    { value = `Register (Value.const_float ctx Double value |> unwrap)
+    ; kind = Machtype Float
+    }
   ;;
 
   let with_var_in_env ~name ~value ~f =
@@ -114,7 +135,7 @@ module With_context (Context : Context) = struct
     | Machtype Float, Machtype Float ->
       Some t
     | Machtype (Addr | Val), Machtype Int ->
-      let new_type = val_type in
+      let new_type = unwrap_type val_type in
       Some
         { kind = new_machtype
         ; value =
@@ -154,7 +175,7 @@ module With_context (Context : Context) = struct
       raise_s [%message "Cannot demomote addresses or floats to integer."]
     | Machtype Int -> t
     | Machtype Val ->
-      let new_type = int_type in
+      let new_type = unwrap_type int_type in
       { value =
           (match t.value with
           | `Register value -> `Register (build_ptrtoint value new_type "" builder)
@@ -223,7 +244,7 @@ module With_context (Context : Context) = struct
     let fabs_intrinsic =
       Llvm.declare_function
         "llvm.fabs.double"
-        (Llvm.function_type float_type [| float_type |])
+        (Llvm.function_type (unwrap_type float_type) [| unwrap_type float_type |])
         this_module
     in
     build_call fabs_intrinsic [| value |] name builder
@@ -282,11 +303,13 @@ module With_context (Context : Context) = struct
       | Void | Never_returns | Machtype Int | Machtype Addr | Machtype Float -> ()
       | Machtype Val ->
         (* Add a GC root for this thing. *)
-        let var_ptr = build_pointercast var_ptr (pointer_type val_type) "" builder in
+        let var_ptr =
+          build_pointercast var_ptr (pointer_type (unwrap_type val_type)) "" builder
+        in
         let (_ : llvalue) =
           build_call
-            Intrinsics.gcroot
-            [| var_ptr; const_pointer_null val_type |]
+            (unwrap_fn Intrinsics.gcroot)
+            [| var_ptr; const_pointer_null (unwrap_type val_type) |]
             ""
             builder
         in
@@ -316,11 +339,13 @@ module With_context (Context : Context) = struct
       | Void | Never_returns | Machtype Int | Machtype Addr | Machtype Float -> ()
       | Machtype Val ->
         (* Add a GC root for this thing. *)
-        let var_ptr = build_pointercast var_ptr (pointer_type val_type) "" builder in
+        let var_ptr =
+          build_pointercast var_ptr (pointer_type (unwrap_type val_type)) "" builder
+        in
         let (_ : llvalue) =
           build_call
-            Intrinsics.gcroot
-            [| var_ptr; const_pointer_null val_type |]
+            (unwrap_fn Intrinsics.gcroot)
+            [| var_ptr; const_pointer_null (unwrap_type val_type) |]
             ""
             builder
         in
@@ -443,7 +468,7 @@ module With_context (Context : Context) = struct
         in
         position_at_end merge_bb builder;
         if List.is_empty incoming
-        then { value = `Register (Llvm.const_int int_type 1); kind = Void }
+        then const_unit
         else
           { value = `Register (build_phi incoming "iftmp" builder); kind = target_kind })
     | Ccatch (_, [ (index, [], handler, _) ], body) ->
@@ -571,22 +596,24 @@ module With_context (Context : Context) = struct
       let domain_exn_ptr =
         let offset = Ocaml_common.Domainstate.idx_of_field Domain_exception_pointer * 8 in
         build_in_bounds_gep
-          domain_state_ptr
+          (unwrap domain_state_ptr)
           [| const_int offset |> llvm_value |]
           "domain_exn_ptr"
           builder
       in
       let push_handler =
         const_inline_asm
-          (function_type void_type [| val_type; val_type |])
+          (function_type
+             (unwrap_type void_type)
+             [| unwrap_type val_type; unwrap_type val_type |])
           ~assembly:"lea $1(%rip),%r11; push %r11; push ($0); mov %rsp,($0)"
           ~constraints:"r,X,~{r11}"
-          ~has_side_effects:true 
+          ~has_side_effects:true
           ~should_align_stack:false
       in
       let pop_handler =
         const_inline_asm
-          (function_type void_type [| val_type |])
+          (function_type (unwrap_type void_type) [| unwrap_type val_type |])
           ~assembly:"pop ($0); add $$8,%rsp"
           ~constraints:"r"
           ~has_side_effects:true
@@ -667,7 +694,7 @@ module With_context (Context : Context) = struct
       position_at_end handler_bb builder;
       let get_exn =
         const_inline_asm
-          (function_type val_type [||])
+          (function_type (unwrap_type val_type) [||])
           ~assembly:""
           ~constraints:"={rax}"
           ~has_side_effects:false
@@ -757,9 +784,15 @@ module With_context (Context : Context) = struct
         let call = build_call caml_c_call (Array.of_list args) "" builder in
         (* Epilogue to a c call - put r15 into *r14... *)
         let r14 = Intrinsics.read_register `r14 builder in
-        let r14 = build_pointercast r14 (pointer_type int_type) "" builder in
-        let star_r14 = build_load r14 "" builder in
-        let (_ : llvalue) = Intrinsics.write_register `r15 star_r14 builder in
+        let r14 =
+          Value.build_pointercast
+            r14
+            ~new_type:(Ltype.pointer_type val_type)
+            ~name:""
+            ~builder
+        in
+        let star_r14 = Value.build_load r14 ~name:"" ~builder in
+        let (_ : llvalue) = Intrinsics.write_register `r15 star_r14 builder |> unwrap in
         set_instruction_call_conv Declarations.ocaml_ext_calling_convention call;
         { value = `Register call; kind = return_kind })
       else (
@@ -819,7 +852,7 @@ module With_context (Context : Context) = struct
           `Register
             (build_zext
                (build_icmp cmp left right "icmp" builder)
-               int_type
+               (unwrap_type int_type)
                "zext"
                builder)
       ; kind = Machtype Int
@@ -853,7 +886,7 @@ module With_context (Context : Context) = struct
           `Register
             (build_zext
                (build_fcmp cmp left right "fcmp" builder)
-               int_type
+               (unwrap_type int_type)
                "zext"
                builder)
       ; kind = Machtype Int
@@ -888,7 +921,7 @@ module With_context (Context : Context) = struct
           `Register
             (build_zext
                (build_icmp cmp diff (const_int 0 |> llvm_value) "icmp" builder)
-               int_type
+               (unwrap_type int_type)
                "zext"
                builder)
       ; kind = Machtype Int
@@ -910,7 +943,8 @@ module With_context (Context : Context) = struct
         |> promote_value_if_necessary_exn ~new_machtype:(Machtype Float)
         |> llvm_value
       in
-      { value = `Register (build_bitcast value int_type "intoffloat" builder)
+      { value =
+          `Register (build_bitcast value (unwrap_type int_type) "intoffloat" builder)
       ; kind = Machtype Int
       }
     | Cintoffloat, _ -> assert false
@@ -920,7 +954,8 @@ module With_context (Context : Context) = struct
         |> promote_value_if_necessary_exn ~new_machtype:(Machtype Int)
         |> llvm_value
       in
-      { value = `Register (build_bitcast value float_type "floatofint" builder)
+      { value =
+          `Register (build_bitcast value (unwrap_type float_type) "floatofint" builder)
       ; kind = Machtype Float
       }
     | Cfloatofint, _ -> assert false
@@ -940,10 +975,10 @@ module With_context (Context : Context) = struct
         | Sixteen_signed -> Int, i16_type ctx, `Signed
         | Thirtytwo_unsigned -> Int, i32_type ctx, `Zero
         | Thirtytwo_signed -> Int, i32_type ctx, `Signed
-        | Word_int -> Int, int_type, `Don't
-        | Word_val -> Val, val_type, `Don't
+        | Word_int -> Int, unwrap_type int_type, `Don't
+        | Word_val -> Val, unwrap_type val_type, `Don't
         | Single -> Float, Llvm.float_type ctx, `Float
-        | Double | Double_u -> Float, float_type, `Don't
+        | Double | Double_u -> Float, unwrap_type float_type, `Don't
       in
       let ptr = build_pointercast ptr (pointer_type mem_lltype) "load" builder in
       let value = build_load ptr "" builder in
@@ -966,10 +1001,10 @@ module With_context (Context : Context) = struct
         | Sixteen_signed -> Int, i16_type ctx, `Trunc
         | Thirtytwo_unsigned -> Int, i32_type ctx, `Trunc
         | Thirtytwo_signed -> Int, i32_type ctx, `Trunc
-        | Word_int -> Int, int_type, `Don't
-        | Word_val -> Val, val_type, `Don't
+        | Word_int -> Int, unwrap_type int_type, `Don't
+        | Word_val -> Val, unwrap_type val_type, `Don't
         | Single -> Float, Llvm.float_type ctx, `Float
-        | Double | Double_u -> Float, float_type, `Don't
+        | Double | Double_u -> Float, unwrap_type float_type, `Don't
       in
       let value =
         compile_expression value
@@ -1003,7 +1038,11 @@ module With_context (Context : Context) = struct
       | Some terminator -> position_before terminator builder);
       let ptr_ptr = build_alloca (pointer_type (i8_type ctx)) "alloc_ptr" builder in
       let (_ : llvalue) =
-        build_call Intrinsics.gcroot [| ptr_ptr; const_pointer_null val_type |] "" builder
+        build_call
+          (unwrap_fn Intrinsics.gcroot)
+          [| ptr_ptr; const_pointer_null (unwrap_type val_type) |]
+          ""
+          builder
       in
       position_at_end insertion_block builder;
       let bytes = 8 + (List.length data * 8) in
@@ -1015,15 +1054,17 @@ module With_context (Context : Context) = struct
         | 32 -> "caml_alloc3"
         | _ ->
           let r15 = Intrinsics.read_register `r15 builder in
-          let new_r15 = build_gep r15 [| bytes_ll |] "" builder in
-          let (_ : llvalue) = Intrinsics.write_register `r15 new_r15 builder in
+          let new_r15 = build_gep (unwrap r15) [| bytes_ll |] "" builder in
+          let (_ : llvalue) =
+            Intrinsics.write_register `r15 (wrap new_r15) builder |> unwrap
+          in
           "caml_allocN"
       in
       let caml_alloc =
-        Llvm.declare_function function_to_call (function_type void_type [||]) this_module
+        Llvm.declare_function function_to_call (function_type (unwrap_type void_type) [||]) this_module
       in
       let (_ : llvalue) = build_call caml_alloc [||] "" builder in
-      let r15 = Intrinsics.read_register `r15 builder in
+      let r15 = Intrinsics.read_register `r15 builder |> unwrap in
       let ptr = build_gep r15 [| const_int 8 |> llvm_value |] "" builder in
       let tag_value =
         compile_expression tag
@@ -1070,7 +1111,7 @@ module With_context (Context : Context) = struct
       let (_ : llvalue) = build_cond_br cond in_bounds out_of_bounds builder in
       position_at_end out_of_bounds builder;
       (* FIXME: throw an exception instead. *)
-      let abort = declare_function "abort" (function_type void_type [||]) this_module in
+      let abort = declare_function "abort" (function_type (unwrap_type void_type) [||]) this_module in
       let (_ : llvalue) = build_call abort [||] "" builder in
       let (_ : llvalue) = build_unreachable builder in
       position_at_end in_bounds builder;
@@ -1088,7 +1129,7 @@ module With_context (Context : Context) = struct
       let caml_raise_exn =
         declare_function
           "caml_raise_exn"
-          (function_type void_type [| val_type |])
+          (function_type (unwrap_type void_type) [| (unwrap_type val_type) |])
           this_module
       in
       (match raise_kind with
@@ -1098,12 +1139,12 @@ module With_context (Context : Context) = struct
             Ocaml_common.Domainstate.idx_of_field Domain_exception_pointer * 8
           in
           build_in_bounds_gep
-            domain_state_ptr
+            (unwrap domain_state_ptr)
             [| const_int offset |> llvm_value |]
             "domain_exn_ptr"
             builder
         in
-        let call = build_call raise_exn [| exn_val; domain_exn_ptr |] "" builder in
+        let call = build_call (unwrap_fn raise_exn) [| exn_val; domain_exn_ptr |] "" builder in
         set_instruction_call_conv Declarations.ocaml_calling_convention call;
         { kind = Never_returns; value = `Register (build_unreachable builder) }
       | Raise_reraise ->
@@ -1114,7 +1155,7 @@ module With_context (Context : Context) = struct
         let domain_backtrace_ptr =
           let offset = Ocaml_common.Domainstate.idx_of_field Domain_backtrace_pos * 8 in
           build_in_bounds_gep
-            domain_state_ptr
+            (unwrap domain_state_ptr)
             [| const_int offset |> llvm_value |]
             "domain_exn_ptr"
             builder
