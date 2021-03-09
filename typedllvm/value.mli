@@ -16,6 +16,7 @@ with type 'a value := 'a t
 type ('return, 'args) fn
 
 val fn_to_llvm : _ fn -> Llvm.llvalue
+val unsafe_fn_of_llvm : Llvm.llvalue -> _ fn
 val const_int : Llvm.llcontext -> 'size Ltype.Int_size.t -> int -> 'size Ltype.int t
 
 (** [signed] defaults to true. *)
@@ -73,9 +74,18 @@ val declare_function
 
 val build_call
   :  ('return, 'args) fn
-  -> ('return, 'args) Args.t
-  -> string
-  -> builder
+  -> args:('return, 'args) Args.t
+  -> name:string
+  -> builder:builder
+  -> 'result t
+
+val build_callbr
+  :  ('return, 'args) fn
+  -> fallthrough:Llvm.llbasicblock
+  -> args:('return, 'args) Args.t
+  -> targets:Llvm.llbasicblock list
+  -> name:string
+  -> builder:builder
   -> 'result t
 
 module Int_binop : sig
@@ -137,3 +147,6 @@ val build_load : name:string -> builder:builder -> 'a Ltype.pointer t -> 'a t
 val build_store : builder:builder -> dst:'a Ltype.pointer t -> 'a t -> unit t
 val mdnode : ctx:Llvm.llcontext -> string Ltype.md t list -> string list Ltype.md t
 val mdstring : ctx:Llvm.llcontext -> string -> string Ltype.md t
+
+(* TODO: maybe have a specific phantom type for bb pointers? *)
+val block_address : func:_ fn -> Llvm.llbasicblock -> [ `i8 ] Ltype.int Ltype.pointer t

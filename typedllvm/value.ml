@@ -25,6 +25,7 @@ end
 type ('return, 'args) fn = Llvm.llvalue
 
 let fn_to_llvm t = t
+let unsafe_fn_of_llvm t = t
 
 let const_int ctx (size : 'size Ltype.Int_size.t) n : 'size Ltype.int t =
   Llvm.const_int (Ltype.int_type ctx size |> Ltype.to_llvm) n
@@ -54,8 +55,18 @@ let declare_function ~name ~typ:ftype ~module_:this_module =
   Llvm.declare_function name (Ltype.Func.to_llvm ftype) this_module
 ;;
 
-let build_call fn args name builder =
+let build_call fn ~args ~name ~builder =
   Llvm.build_call fn (Args.to_arg_list args |> Array.of_list) name builder
+;;
+
+let build_callbr fn ~fallthrough ~args ~targets ~name ~builder =
+  Llvm.build_callbr
+    fn
+    fallthrough
+    (Array.of_list (Args.to_arg_list args))
+    (Array.of_list targets)
+    name
+    builder
 ;;
 
 let build_inttoptr ~ptr_type ~name ~builder t =
@@ -136,3 +147,4 @@ let build_float_binop ~name ~builder ~(op : Float_binop.t) l r =
 let build_fneg ~name ~builder t = Llvm.build_fneg t name builder
 let mdnode ~ctx nodes = Llvm.mdnode ctx (Array.of_list nodes)
 let mdstring ~ctx s = Llvm.mdstring ctx s
+let block_address ~func bb = Llvm.block_address func bb

@@ -35,7 +35,11 @@ module With_context (Context : Context) = struct
           ~module_:this_module
       in
       let value =
-        Value.build_call func Value.Args.(reg @: nil) ("read_" ^ name) builder
+        Value.build_call
+          func
+          ~args:Value.Args.(reg @: nil)
+          ~name:("read_" ^ name)
+          ~builder
       in
       Value.build_inttoptr value ~ptr_type:val_type ~name:"" ~builder
     ;;
@@ -55,7 +59,7 @@ module With_context (Context : Context) = struct
               Ltype.mdnode ctx (Ltype.mdstring ctx) @-> int_type @-> returns void_type)
           ~module_:this_module
       in
-      Value.build_call func Value.Args.(reg @: value @: nil) "" builder
+      Value.build_call func ~args:Value.Args.(reg @: value @: nil) ~name:"" ~builder
     ;;
   end
 
@@ -75,6 +79,7 @@ module With_context (Context : Context) = struct
 
   (* Provide ourselves with ways to cheat while we make things more typeful. *)
   let wrap v = Value.unsafe_of_llvm v
+
   (* let wrap_type t = Value.unsafe_of_llvm t *)
 
   let const_unit =
@@ -602,18 +607,16 @@ module With_context (Context : Context) = struct
           ~builder
       in
       let push_handler =
-        const_inline_asm
-          (function_type
-             (unwrap_type void_type)
-             [| unwrap_type val_type; unwrap_type val_type |])
+        Value.const_inline_asm
+          ~typ:Ltype.Func.(val_type @-> val_type @-> returns void_type)
           ~assembly:"lea $1(%rip),%r11; push %r11; push ($0); mov %rsp,($0)"
           ~constraints:"r,X,~{r11}"
           ~has_side_effects:true
           ~should_align_stack:false
       in
       let pop_handler =
-        const_inline_asm
-          (function_type (unwrap_type void_type) [| unwrap_type val_type |])
+        Value.const_inline_asm
+          ~typ:Ltype.Func.(val_type @-> returns void_type)
           ~assembly:"pop ($0); add $$8,%rsp"
           ~constraints:"r"
           ~has_side_effects:true
@@ -659,18 +662,24 @@ module With_context (Context : Context) = struct
       let body_bb = append_block ctx "body" this_function in
       let handler_bb = append_block ctx "handler" this_function in
       let merge_bb = append_block ctx "merge" this_function in
-      let (_ : llvalue) =
+      let (_ : unit Value.t) =
         (* We kind of abuse LLVM's callbr instruction here. It's intended to
            allow assembly code to branch to LLVM labels, but here we store the
            label on the stack, and branch to it later. The semantics are similar
            enough that it doesn't break too many things. *)
-        build_callbr
+        Value.build_callbr
           push_handler
-          body_bb
-          [| unwrap domain_exn_ptr; block_address this_function handler_bb |]
-          [| handler_bb |]
-          ""
-          builder
+          ~fallthrough:body_bb
+          ~args:
+            Value.Args.(
+              domain_exn_ptr
+              @: Value.block_address
+                   ~func:(Value.unsafe_fn_of_llvm this_function)
+                   handler_bb
+              @: nil)
+          ~targets:[ handler_bb ]
+          ~name:""
+          ~builder
       in
       (* compile the bit between try and with *)
       position_at_end body_bb builder;
@@ -680,8 +689,12 @@ module With_context (Context : Context) = struct
         (* pop the handler, then continue *)
         match block_terminator real_body_bb with
         | None ->
-          let (_ : llvalue) =
-            build_call pop_handler [| unwrap domain_exn_ptr |] "" builder
+          let (_ : unit Value.t) =
+            Value.build_call
+              pop_handler
+              ~args:Value.Args.(domain_exn_ptr @: nil)
+              ~name:""
+              ~builder
           in
           let (_ : llvalue) = build_br merge_bb builder in
           [ good_case, real_body_bb ]
@@ -689,26 +702,30 @@ module With_context (Context : Context) = struct
           position_before terminator builder;
           (* FIXME: This probably actually needs to happen before any exit
              nodes... I don't know how to find them though.  *)
-          let (_ : llvalue) =
-            build_call pop_handler [| unwrap domain_exn_ptr |] "" builder
+          let (_ : unit Value.t) =
+            Value.build_call
+              pop_handler
+              ~args:Value.Args.(domain_exn_ptr @: nil)
+              ~name:""
+              ~builder
           in
           []
       in
       (* compile the handler *)
       position_at_end handler_bb builder;
       let get_exn =
-        const_inline_asm
-          (function_type (unwrap_type val_type) [||])
+        Value.const_inline_asm
+          ~typ:Ltype.Func.(returns val_type)
           ~assembly:""
           ~constraints:"={rax}"
           ~has_side_effects:false
           ~should_align_stack:false
       in
-      let exn = build_call get_exn [||] "exn" builder in
+      let exn = Value.build_call get_exn ~args:Value.Args.(nil) ~name:"exn" ~builder in
       let handler_result =
         with_var_in_env
           ~name:(Backend_var.unique_name (Backend_var.With_provenance.var var))
-          ~value:{ value = `Register exn; kind = Machtype Val }
+          ~value:{ value = `Register (unwrap exn); kind = Machtype Val }
           ~f:(fun () -> compile_expression handler)
       in
       let real_handler_bb = insertion_block builder in
