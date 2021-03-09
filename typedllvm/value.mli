@@ -16,7 +16,6 @@ with type 'a value := 'a t
 type ('return, 'args) fn
 
 val fn_to_llvm : _ fn -> Llvm.llvalue
-
 val const_int : Llvm.llcontext -> 'size Ltype.Int_size.t -> int -> 'size Ltype.int t
 
 (** [signed] defaults to true. *)
@@ -58,6 +57,13 @@ val build_pointercast
   -> builder:builder
   -> _ Ltype.pointer t
   -> 'kind Ltype.pointer t
+
+val build_in_bounds_gep
+  :  offsets:_ Ltype.int t list
+  -> name:string
+  -> builder:builder
+  -> 'a Ltype.pointer t
+  -> 'a Ltype.pointer t
 
 val declare_function
   :  name:string

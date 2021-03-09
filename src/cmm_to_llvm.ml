@@ -595,11 +595,11 @@ module With_context (Context : Context) = struct
       let domain_state_ptr = Intrinsics.read_register `r14 builder in
       let domain_exn_ptr =
         let offset = Ocaml_common.Domainstate.idx_of_field Domain_exception_pointer * 8 in
-        build_in_bounds_gep
-          (unwrap domain_state_ptr)
-          [| const_int offset |> llvm_value |]
-          "domain_exn_ptr"
-          builder
+        Value.build_in_bounds_gep
+          domain_state_ptr
+          ~offsets:[ Value.const_int ctx I64 offset ]
+          ~name:"domain_exn_ptr"
+          ~builder
       in
       let push_handler =
         const_inline_asm
@@ -667,7 +667,7 @@ module With_context (Context : Context) = struct
         build_callbr
           push_handler
           body_bb
-          [| domain_exn_ptr; block_address this_function handler_bb |]
+          [| unwrap domain_exn_ptr; block_address this_function handler_bb |]
           [| handler_bb |]
           ""
           builder
@@ -680,14 +680,18 @@ module With_context (Context : Context) = struct
         (* pop the handler, then continue *)
         match block_terminator real_body_bb with
         | None ->
-          let (_ : llvalue) = build_call pop_handler [| domain_exn_ptr |] "" builder in
+          let (_ : llvalue) =
+            build_call pop_handler [| unwrap domain_exn_ptr |] "" builder
+          in
           let (_ : llvalue) = build_br merge_bb builder in
           [ good_case, real_body_bb ]
         | Some terminator ->
           position_before terminator builder;
           (* FIXME: This probably actually needs to happen before any exit
              nodes... I don't know how to find them though.  *)
-          let (_ : llvalue) = build_call pop_handler [| domain_exn_ptr |] "" builder in
+          let (_ : llvalue) =
+            build_call pop_handler [| unwrap domain_exn_ptr |] "" builder
+          in
           []
       in
       (* compile the handler *)
@@ -1061,7 +1065,10 @@ module With_context (Context : Context) = struct
           "caml_allocN"
       in
       let caml_alloc =
-        Llvm.declare_function function_to_call (function_type (unwrap_type void_type) [||]) this_module
+        Llvm.declare_function
+          function_to_call
+          (function_type (unwrap_type void_type) [||])
+          this_module
       in
       let (_ : llvalue) = build_call caml_alloc [||] "" builder in
       let r15 = Intrinsics.read_register `r15 builder |> unwrap in
@@ -1111,7 +1118,9 @@ module With_context (Context : Context) = struct
       let (_ : llvalue) = build_cond_br cond in_bounds out_of_bounds builder in
       position_at_end out_of_bounds builder;
       (* FIXME: throw an exception instead. *)
-      let abort = declare_function "abort" (function_type (unwrap_type void_type) [||]) this_module in
+      let abort =
+        declare_function "abort" (function_type (unwrap_type void_type) [||]) this_module
+      in
       let (_ : llvalue) = build_call abort [||] "" builder in
       let (_ : llvalue) = build_unreachable builder in
       position_at_end in_bounds builder;
@@ -1129,7 +1138,7 @@ module With_context (Context : Context) = struct
       let caml_raise_exn =
         declare_function
           "caml_raise_exn"
-          (function_type (unwrap_type void_type) [| (unwrap_type val_type) |])
+          (function_type (unwrap_type void_type) [| unwrap_type val_type |])
           this_module
       in
       (match raise_kind with
@@ -1144,7 +1153,9 @@ module With_context (Context : Context) = struct
             "domain_exn_ptr"
             builder
         in
-        let call = build_call (unwrap_fn raise_exn) [| exn_val; domain_exn_ptr |] "" builder in
+        let call =
+          build_call (unwrap_fn raise_exn) [| exn_val; domain_exn_ptr |] "" builder
+        in
         set_instruction_call_conv Declarations.ocaml_calling_convention call;
         { kind = Never_returns; value = `Register (build_unreachable builder) }
       | Raise_reraise ->

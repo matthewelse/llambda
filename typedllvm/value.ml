@@ -18,8 +18,7 @@ module Args = struct
   let ( @: ) left right = Cons (left, right)
 
   let rec to_arg_list : type args return. (return, args) t -> Llvm.llvalue list =
-   fun args ->
-    match args with Cons (l, r) -> to_llvm l :: to_arg_list r | Nil -> []
+   fun args -> match args with Cons (l, r) -> to_llvm l :: to_arg_list r | Nil -> []
  ;;
 end
 
@@ -70,6 +69,10 @@ let build_ptrtoint ~name ~builder t =
 
 let build_pointercast ~new_type ~name ~builder t =
   Llvm.build_pointercast t (Ltype.to_llvm new_type) name builder
+;;
+
+let build_in_bounds_gep ~offsets ~name ~builder t =
+  Llvm.build_in_bounds_gep t (Array.of_list offsets) name builder
 ;;
 
 let build_load ~name ~builder ptr = Llvm.build_load ptr name builder
