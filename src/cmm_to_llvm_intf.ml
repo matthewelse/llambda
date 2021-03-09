@@ -13,7 +13,11 @@ let raw_type t =
   | `Register value -> Llvm.type_of value
 ;;
 
-let raw_value t = match t.value with `Stack value -> value | `Register value -> value
+let raw_value t =
+  match t.value with
+  | `Stack value -> value
+  | `Register value -> value
+;;
 
 module type Context = sig
   val ctx : llcontext

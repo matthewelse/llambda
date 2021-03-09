@@ -4,7 +4,6 @@ type _ t [@@deriving sexp_of]
 
 val to_llvm : 'a t -> Llvm.lltype
 val unsafe_of_llvm : Llvm.lltype -> 'a t
-
 val void_type : Llvm.llcontext -> unit t
 
 module Int_size : sig
@@ -44,7 +43,6 @@ module Func : sig
 
   val returns : 'a typ -> ('a, 'a) t
   val ( @-> ) : 'a typ -> ('return, 'args) t -> ('return, 'a -> 'args) t
-
   val to_llvm : _ t -> Llvm.lltype
 end
 with type 'a typ := 'a t

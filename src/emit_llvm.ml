@@ -28,7 +28,11 @@ let mangle_symbol_name esc s =
 ;;
 
 let value_of_data_item (data_item : Cmm.data_item) =
-  let prefix = match Ocaml_common.Config.system with "macosx" -> "_" | _ -> "" in
+  let prefix =
+    match Ocaml_common.Config.system with
+    | "macosx" -> "_"
+    | _ -> ""
+  in
   match data_item with
   | Cdefine_symbol name -> prefix ^ mangle_symbol_name '$' name ^ ":"
   | Cglobal_symbol name -> ".globl " ^ prefix ^ mangle_symbol_name '$' name

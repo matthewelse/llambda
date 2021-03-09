@@ -34,7 +34,9 @@ let ( ++ ) x f = f x
    they are already available in the process *)
 let compile_genfuns f =
   List.filter_map
-    (function Cfunction { fun_name = name } as ph when f name -> Some ph | _ -> None)
+    (function
+      | Cfunction { fun_name = name } as ph when f name -> Some ph
+      | _ -> None)
     (Cmm_helpers.generic_functions true [ Compilenv.current_unit_infos () ])
 ;;
 
@@ -105,7 +107,10 @@ let end_gen_implementation ?toplevel ~ctx ~this_module (clambda : Clambda.with_c
                    then None
                    else Some (Primitive.native_name prim))
                  !Translmod.primitive_declarations)
-           :: (match toplevel with None -> [] | Some f -> compile_genfuns f))
+           ::
+           (match toplevel with
+           | None -> []
+           | Some f -> compile_genfuns f))
            @ unit_phrases
          in
          Emit_llvm.emit ~ctx ~this_module phrases)

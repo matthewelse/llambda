@@ -93,7 +93,11 @@ let%expect_test "allocations" =
     ~show_functions:[ "hd"; "print_int_option" ]
     [%str
       (* Return 0, rather than none here to just test pattern matching, rather than allocations. *)
-      let hd (x : 'a list) : 'a option = match x with x :: _ -> Some x | [] -> None
+      let hd (x : 'a list) : 'a option =
+        match x with
+        | x :: _ -> Some x
+        | [] -> None
+      ;;
 
       let print_int_option t =
         match t with

@@ -73,7 +73,11 @@ let%expect_test "match statement" =
           ~options
           [%str
             (* Return 0, rather than none here to just test pattern matching, rather than allocations. *)
-            let hd (x : int list) = match x with x :: _ -> x | _ -> 0
+            let hd (x : int list) =
+              match x with
+              | x :: _ -> x
+              | _ -> 0
+            ;;
 
             let () =
               print_int (hd [ 1; 2; 3; 4 ]);
@@ -94,7 +98,9 @@ let%expect_test "allocations" =
           [%str
             (* Return 0, rather than none here to just test pattern matching, rather than allocations. *)
             let hd (x : 'a list) : 'a option =
-              match x with x :: _ -> Some x | [] -> None
+              match x with
+              | x :: _ -> Some x
+              | [] -> None
             ;;
 
             let print_int_option t =
@@ -231,7 +237,8 @@ let%expect_test "test exceptions" =
             ;;
 
             let[@cold] main n =
-              try will_this_thing_raise n with Fail n -> Printf.printf "failed: %d\n" n
+              try will_this_thing_raise n with
+              | Fail n -> Printf.printf "failed: %d\n" n
             ;;
 
             let () =

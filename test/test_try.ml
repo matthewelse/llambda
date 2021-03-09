@@ -11,7 +11,10 @@ let%expect_test "try/with" =
       let g x = if x = 0 then raise (Sad_times 0) else x * 10
 
       let f n m =
-        let result = try g n with Sad_times res -> res in
+        let result =
+          try g n with
+          | Sad_times res -> res
+        in
         m * result
       ;;];
   [%expect

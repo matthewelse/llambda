@@ -23,7 +23,11 @@ module With_context (Context : Context) = struct
     ;;
 
     let read_register reg builder =
-      let name = match reg with `r15 -> "r15" | `r14 -> "r14" in
+      let name =
+        match reg with
+        | `r15 -> "r15"
+        | `r14 -> "r14"
+      in
       let reg =
         let reg_md = Value.mdstring ~ctx name in
         Value.mdnode ~ctx [ reg_md ]
@@ -45,7 +49,10 @@ module With_context (Context : Context) = struct
     ;;
 
     let write_register reg value builder =
-      let name = match reg with `r15 -> "r15" in
+      let name =
+        match reg with
+        | `r15 -> "r15"
+      in
       let reg =
         let reg_md = Value.mdstring ~ctx name in
         Value.mdnode ~ctx [ reg_md ]
@@ -137,8 +144,7 @@ module With_context (Context : Context) = struct
     | Machtype Int, Machtype Int
     | Machtype Val, Machtype Val
     | Machtype Addr, Machtype Addr
-    | Machtype Float, Machtype Float ->
-      Some t
+    | Machtype Float, Machtype Float -> Some t
     | Machtype (Addr | Val), Machtype Int ->
       let new_type = unwrap_type val_type in
       Some
@@ -157,8 +163,7 @@ module With_context (Context : Context) = struct
     | Machtype Int, Machtype (Addr | Val | Float)
     | Machtype Val, Machtype (Addr | Float)
     | Machtype Addr, Machtype Float
-    | Machtype Float, Machtype (Addr | Val | Int) ->
-      None
+    | Machtype Float, Machtype (Addr | Val | Int) -> None
     | Never_returns, _ | _, Never_returns -> Some t
   ;;
 
@@ -471,7 +476,9 @@ module With_context (Context : Context) = struct
       | _ ->
         let incoming =
           List.filter_map incoming ~f:(fun (kind, value, bb) ->
-              match kind with Void -> None | _ -> Some (value, bb))
+              match kind with
+              | Void -> None
+              | _ -> Some (value, bb))
         in
         position_at_end merge_bb builder;
         if List.is_empty incoming
@@ -519,7 +526,9 @@ module With_context (Context : Context) = struct
       | _ ->
         let incoming =
           List.filter_map incoming ~f:(fun (kind, value, bb) ->
-              match kind with Void -> None | _ -> Some (value, bb))
+              match kind with
+              | Void -> None
+              | _ -> Some (value, bb))
         in
         position_at_end exit_bb builder;
         if List.is_empty incoming
@@ -589,7 +598,9 @@ module With_context (Context : Context) = struct
         in
         let incoming =
           List.filter_map results ~f:(fun (kind, value, bb) ->
-              match kind with Void -> None | _ -> Some (value, bb))
+              match kind with
+              | Void -> None
+              | _ -> Some (value, bb))
         in
         if List.is_empty incoming
         then const_unit
@@ -865,13 +876,24 @@ module With_context (Context : Context) = struct
       let right = cast_to_int_if_necessary_exn right |> llvm_value in
       let right = build_sext right (integer_type ctx 128) "" builder in
       let result = build_mul left right "" builder in
-      let result = build_lshr result (Llvm.const_int (integer_type ctx 128) 64) "" builder in
+      let result =
+        build_lshr result (Llvm.const_int (integer_type ctx 128) 64) "" builder
+      in
       let result = build_trunc result (unwrap_type int_type) "" builder in
       { kind = Machtype Int; value = `Register result }
-    | ( ( Caddi | Csubi | Cmuli | Cmulhi | Cdivi | Cmodi | Cand | Cor | Cxor | Clsl | Clsr
+    | ( ( Caddi
+        | Csubi
+        | Cmuli
+        | Cmulhi
+        | Cdivi
+        | Cmodi
+        | Cand
+        | Cor
+        | Cxor
+        | Clsl
+        | Clsr
         | Casr )
-      , _ ) ->
-      assert false
+      , _ ) -> assert false
     | Ccmpi cmp, [ left; right ] ->
       let cmp : Llvm.Icmp.t =
         match cmp with

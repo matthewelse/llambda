@@ -18,7 +18,10 @@ module Args = struct
   let ( @: ) left right = Cons (left, right)
 
   let rec to_arg_list : type args return. (return, args) t -> Llvm.llvalue list =
-   fun args -> match args with Cons (l, r) -> to_llvm l :: to_arg_list r | Nil -> []
+   fun args ->
+    match args with
+    | Cons (l, r) -> to_llvm l :: to_arg_list r
+    | Nil -> []
  ;;
 end
 

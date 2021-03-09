@@ -62,20 +62,27 @@ module Func = struct
   let ( @-> ) l r = Cons (l, r)
 
   let rec to_list : type args return. (return, args) t -> Llvm.lltype list =
-   fun args -> match args with Cons (l, r) -> l :: to_list r | Returns typ -> [ typ ]
+   fun args ->
+    match args with
+    | Cons (l, r) -> l :: to_list r
+    | Returns typ -> [ typ ]
  ;;
 
   let rec to_arg_list : type args return. (return, args) t -> Llvm.lltype list =
-   fun args -> match args with Cons (l, r) -> l :: to_arg_list r | Returns _ -> []
+   fun args ->
+    match args with
+    | Cons (l, r) -> l :: to_arg_list r
+    | Returns _ -> []
  ;;
 
   let rec return_type : type args return. (return, args) t -> Llvm.lltype =
-   fun args -> match args with Cons (_, r) -> return_type r | Returns r -> r
+   fun args ->
+    match args with
+    | Cons (_, r) -> return_type r
+    | Returns r -> r
  ;;
 
-  let to_llvm t =
-    Llvm.function_type (return_type t) (to_arg_list t |> Array.of_list)
-  ;;
+  let to_llvm t = Llvm.function_type (return_type t) (to_arg_list t |> Array.of_list)
 
   let sexp_of_t _ _ t =
     to_list t
