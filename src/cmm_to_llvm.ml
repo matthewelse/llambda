@@ -198,72 +198,74 @@ module With_context (Context : Context) = struct
   ;;
 
   let compile_int_binop ~(operation : Cmm.operation) left right =
-    let build_llvm_op =
+    let op : Value.Int_binop.t =
       match operation with
-      | Caddi -> build_add
-      | Csubi -> build_sub
-      | Cmuli -> build_mul
-      | Cdivi -> build_sdiv
-      | Cmodi -> build_srem
-      | Cand -> build_and
-      | Cor -> build_or
-      | Cxor -> build_xor
-      | Clsl -> build_shl
-      | Clsr -> build_lshr
-      | Casr -> build_ashr
-      | Cmulhi ->
-        fun left right name builder ->
-          let left = build_lshr left (const_int 32 |> llvm_value) name builder in
-          let right = build_lshr right (const_int 32 |> llvm_value) name builder in
-          let output = build_mul left right name builder in
-          let output = build_shl output (const_int 32 |> llvm_value) name builder in
-          build_or output (const_int 1 |> llvm_value) name builder
+      | Caddi -> Add
+      | Csubi -> Sub
+      | Cmuli -> Mul
+      | Cdivi -> Div
+      | Cmodi -> Mod
+      | Cand -> And
+      | Cor -> Or
+      | Cxor -> Xor
+      | Clsl -> Lsl
+      | Clsr -> Lsr
+      | Casr -> Asr
       | _ -> assert false
     in
-    let left = cast_to_int_if_necessary_exn left |> llvm_value in
-    let right = cast_to_int_if_necessary_exn right |> llvm_value in
-    let value = build_llvm_op left right "binop" builder in
-    { value = `Register value; kind = Machtype Int }
+    let left = cast_to_int_if_necessary_exn left |> llvm_value |> wrap in
+    let right = cast_to_int_if_necessary_exn right |> llvm_value |> wrap in
+    let value = Value.build_int_binop left right ~name:"binop" ~builder ~op in
+    { value = `Register (unwrap value); kind = Machtype Int }
   ;;
 
   let compile_float_binop ~(operation : Cmm.operation) left right =
-    let build_llvm_op =
+    let op =
       match operation with
-      | Caddf -> build_fadd
-      | Csubf -> build_fsub
-      | Cmulf -> build_fmul
-      | Cdivf -> build_fdiv
+      | Caddf -> Value.Float_binop.Add
+      | Csubf -> Value.Float_binop.Sub
+      | Cmulf -> Value.Float_binop.Mul
+      | Cdivf -> Value.Float_binop.Div
       | _ -> assert false
     in
     let left =
-      promote_value_if_necessary_exn ~new_machtype:(Machtype Float) left |> llvm_value
+      promote_value_if_necessary_exn ~new_machtype:(Machtype Float) left
+      |> llvm_value
+      |> wrap
     in
     let right =
-      promote_value_if_necessary_exn ~new_machtype:(Machtype Float) right |> llvm_value
+      promote_value_if_necessary_exn ~new_machtype:(Machtype Float) right
+      |> llvm_value
+      |> wrap
     in
-    let value = build_llvm_op left right "binop" builder in
-    { value = `Register value; kind = Machtype Float }
+    let value = Value.build_float_binop left right ~name:"binop" ~builder ~op in
+    { value = `Register (unwrap value); kind = Machtype Float }
   ;;
 
-  let build_fabs value name builder =
+  let build_fabs ~name ~builder value =
     let fabs_intrinsic =
-      Llvm.declare_function
-        "llvm.fabs.double"
-        (Llvm.function_type (unwrap_type float_type) [| unwrap_type float_type |])
-        this_module
+      Value.declare_function
+        ~name:"llvm.fabs.double"
+        ~typ:Ltype.Func.(float_type @-> returns float_type)
+        ~module_:this_module
     in
-    build_call fabs_intrinsic [| value |] name builder
+    Value.build_call fabs_intrinsic ~args:Value.Args.(value @: nil) ~name ~builder
   ;;
 
   let compile_float_unop ~(operation : Cmm.operation) value =
     let build_llvm_op =
-      match operation with Cabsf -> build_fabs | Cnegf -> build_fneg | _ -> assert false
+      match operation with
+      | Cabsf -> build_fabs
+      | Cnegf -> Value.build_fneg
+      | _ -> assert false
     in
     let value =
-      promote_value_if_necessary_exn ~new_machtype:(Machtype Float) value |> llvm_value
+      promote_value_if_necessary_exn ~new_machtype:(Machtype Float) value
+      |> llvm_value
+      |> wrap
     in
-    let value = build_llvm_op value "unop" builder in
-    { value = `Register value; kind = Machtype Float }
+    let value = build_llvm_op value ~name:"unop" ~builder in
+    { value = `Register (unwrap value); kind = Machtype Float }
   ;;
 
   let rec compile_expression (expr : Cmm.expression) : t =
@@ -845,14 +847,27 @@ module With_context (Context : Context) = struct
       in
       { kind = Machtype Addr; value = `Register (build_gep left [| right |] "" builder) }
     | Cadda, _ -> assert false
-    | ( ( Caddi | Csubi | Cmuli | Cmulhi | Cdivi | Cmodi | Cand | Cor | Cxor | Clsl | Clsr
-        | Casr )
+    | ( (Caddi | Csubi | Cmuli | Cdivi | Cmodi | Cand | Cor | Cxor | Clsl | Clsr | Casr)
       , [ left; right ] ) ->
-      (* We should be able to do these operations on Val too *)
       let left = compile_expression left in
       let right = compile_expression right in
       (* print_s [%message "binary operation" (left : t) (right : t)]; *)
       compile_int_binop ~operation left right
+    | Cmulhi, [ left; right ] ->
+      (* Multiply two 64 bit integers, and keep the upper 64 bits from the multiply result. 
+      
+        See Arm's docs: https://developer.arm.com/documentation/dui0801/j/A64-General-Instructions/SMULH?lang=en
+      *)
+      let left = compile_expression left in
+      let right = compile_expression right in
+      let left = cast_to_int_if_necessary_exn left |> llvm_value in
+      let left = build_sext left (integer_type ctx 128) "" builder in
+      let right = cast_to_int_if_necessary_exn right |> llvm_value in
+      let right = build_sext right (integer_type ctx 128) "" builder in
+      let result = build_mul left right "" builder in
+      let result = build_lshr result (Llvm.const_int (integer_type ctx 128) 64) "" builder in
+      let result = build_trunc result (unwrap_type int_type) "" builder in
+      { kind = Machtype Int; value = `Register result }
     | ( ( Caddi | Csubi | Cmuli | Cmulhi | Cdivi | Cmodi | Cand | Cor | Cxor | Clsl | Clsr
         | Casr )
       , _ ) ->

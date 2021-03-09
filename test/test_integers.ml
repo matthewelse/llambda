@@ -68,17 +68,17 @@ let%expect_test "division by constant" =
       %dividend_88 = alloca i64, align 8
       store i64 %binop, i64* %dividend_88, align 4
       %1 = load i64, i64* %dividend_88, align 4
-      %binop1 = lshr i64 %1, 32
-      %binop2 = mul i64 %binop1, 1717986918
-      %binop3 = shl i64 %binop2, 32
-      %binop4 = or i64 %binop3, 1
-      %binop5 = ashr i64 %binop4, 2
-      %2 = load i64, i64* %dividend_88, align 4
-      %binop6 = lshr i64 %2, 63
-      %binop7 = add i64 %binop5, %binop6
-      %binop8 = shl i64 %binop7, 1
-      %binop9 = add i64 %binop8, 1
-      %promote = inttoptr i64 %binop9 to i8*
+      %2 = sext i64 %1 to i128
+      %3 = mul i128 %2, 7378697629483820647
+      %4 = lshr i128 %3, 64
+      %5 = trunc i128 %4 to i64
+      %binop1 = ashr i64 %5, 2
+      %6 = load i64, i64* %dividend_88, align 4
+      %binop2 = lshr i64 %6, 63
+      %binop3 = add i64 %binop1, %binop2
+      %binop4 = shl i64 %binop3, 1
+      %binop5 = add i64 %binop4, 1
+      %promote = inttoptr i64 %binop5 to i8*
       ret i8* %promote
     } |}]
 ;;
@@ -131,19 +131,19 @@ let%expect_test "modulo constant" =
       store i64 %binop, i64* %dividend_88, align 4
       %1 = load i64, i64* %dividend_88, align 4
       %2 = load i64, i64* %dividend_88, align 4
-      %binop1 = lshr i64 %2, 32
-      %binop2 = mul i64 %binop1, 1717986918
-      %binop3 = shl i64 %binop2, 32
-      %binop4 = or i64 %binop3, 1
-      %binop5 = ashr i64 %binop4, 2
-      %3 = load i64, i64* %dividend_88, align 4
-      %binop6 = lshr i64 %3, 63
-      %binop7 = add i64 %binop5, %binop6
-      %binop8 = mul i64 %binop7, 10
-      %binop9 = sub i64 %1, %binop8
-      %binop10 = shl i64 %binop9, 1
-      %binop11 = add i64 %binop10, 1
-      %promote = inttoptr i64 %binop11 to i8*
+      %3 = sext i64 %2 to i128
+      %4 = mul i128 %3, 7378697629483820647
+      %5 = lshr i128 %4, 64
+      %6 = trunc i128 %5 to i64
+      %binop1 = ashr i64 %6, 2
+      %7 = load i64, i64* %dividend_88, align 4
+      %binop2 = lshr i64 %7, 63
+      %binop3 = add i64 %binop1, %binop2
+      %binop4 = mul i64 %binop3, 10
+      %binop5 = sub i64 %1, %binop4
+      %binop6 = shl i64 %binop5, 1
+      %binop7 = add i64 %binop6, 1
+      %promote = inttoptr i64 %binop7 to i8*
       ret i8* %promote
     } |}]
 ;;
