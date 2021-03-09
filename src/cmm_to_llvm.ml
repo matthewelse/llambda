@@ -623,7 +623,7 @@ module With_context (Context : Context) = struct
         Value.const_inline_asm
           ~typ:Ltype.Func.(val_type @-> val_type @-> returns void_type)
           ~assembly:"lea $1(%rip),%r11; push %r11; push ($0); mov %rsp,($0)"
-          ~constraints:"r,X,~{r11}"
+          ~constraints:"r,X,~{r11},~{rsp}" (* this isn't great, but meh... *)
           ~has_side_effects:true
           ~should_align_stack:false
       in

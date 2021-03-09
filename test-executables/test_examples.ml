@@ -249,11 +249,6 @@ let%expect_test "test exceptions" =
       (* FIXME: This didn't actually start working after the changes I made :( *)
       [%expect
         {|
-    (* CR expect_test: Collector ran multiple times with different outputs *)
-    =========================================================================
-    ("Unclean exit" (Signal sigsegv))
-
-    =========================================================================
     passed: 10
     failed: -10 |}])
 ;;

@@ -26,7 +26,7 @@ let%expect_test "try/with" =
       %domain_exn_ptr = getelementptr inbounds i8, i8* %0, i64 16
       %result_109 = alloca i8*, align 8
       call void @llvm.gcroot(i8** %result_109, i8* null)
-      callbr void asm sideeffect "lea $1(%rip),%r11; push %r11; push ($0); mov %rsp,($0)", "r,X,~{r11}"(i8* %domain_exn_ptr, i8* blockaddress(@camlTest__f_XXX, %handler))
+      callbr void asm sideeffect "lea $1(%rip),%r11; push %r11; push ($0); mov %rsp,($0)", "r,X,~{r11},~{rsp}"(i8* %domain_exn_ptr, i8* blockaddress(@camlTest__f_XXX, %handler))
               to label %body [label %handler]
 
     body:                                             ; preds = %entry
