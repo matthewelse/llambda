@@ -675,7 +675,7 @@ module With_context (Context : Context) = struct
       let body_bb = append_block ctx "body" this_function in
       let handler_bb = append_block ctx "handler" this_function in
       let merge_bb = append_block ctx "merge" this_function in
-      let (_ : unit Value.t) =
+      let push_handler_call =
         (* We kind of abuse LLVM's callbr instruction here. It's intended to
            allow assembly code to branch to LLVM labels, but here we store the
            label on the stack, and branch to it later. The semantics are similar
@@ -694,6 +694,7 @@ module With_context (Context : Context) = struct
           ~name:""
           ~builder
       in
+      set_instruction_call_conv CallConv.fast (unwrap push_handler_call);
       (* compile the bit between try and with *)
       position_at_end body_bb builder;
       let good_case = compile_expression expr in
@@ -715,13 +716,14 @@ module With_context (Context : Context) = struct
           position_before terminator builder;
           (* FIXME: This probably actually needs to happen before any exit
              nodes... I don't know how to find them though.  *)
-          let (_ : unit Value.t) =
+          let pop_handler_call =
             Value.build_call
               pop_handler
               ~args:Value.Args.(domain_exn_ptr @: nil)
               ~name:""
               ~builder
           in
+          set_instruction_call_conv CallConv.fast (unwrap pop_handler_call);
           []
       in
       (* compile the handler *)
@@ -735,6 +737,7 @@ module With_context (Context : Context) = struct
           ~should_align_stack:false
       in
       let exn = Value.build_call get_exn ~args:Value.Args.(nil) ~name:"exn" ~builder in
+      set_instruction_call_conv CallConv.fast (unwrap exn);
       let handler_result =
         with_var_in_env
           ~name:(Backend_var.unique_name (Backend_var.With_provenance.var var))

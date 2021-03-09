@@ -26,7 +26,7 @@ let%expect_test "try/with" =
       %domain_exn_ptr = getelementptr inbounds i8, i8* %0, i64 16
       %result_109 = alloca i8*, align 8
       call void @llvm.gcroot(i8** %result_109, i8* null)
-      callbr void asm sideeffect "lea $1(%rip),%r11; push %r11; push ($0); mov %rsp,($0)", "r,X,~{r11},~{rsp}"(i8* %domain_exn_ptr, i8* blockaddress(@camlTest__f_XXX, %handler))
+      callbr fastcc void asm sideeffect "lea $1(%rip),%r11; push %r11; push ($0); mov %rsp,($0)", "r,X,~{r11},~{rsp}"(i8* %domain_exn_ptr, i8* blockaddress(@camlTest__f_XXX, %handler))
               to label %body [label %handler]
 
     body:                                             ; preds = %entry
@@ -35,7 +35,7 @@ let%expect_test "try/with" =
       br label %merge
 
     handler:                                          ; preds = %entry
-      %exn = call i8* asm "", "={rax}"()
+      %exn = call fastcc i8* asm "", "={rax}"()
       %load = bitcast i8* %exn to i8**
       %2 = load i8*, i8** %load, align 8
       %3 = ptrtoint i8* %2 to i64
