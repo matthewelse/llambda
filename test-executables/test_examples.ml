@@ -247,8 +247,29 @@ let%expect_test "test exceptions" =
             ;;]
       in
       (* FIXME: This didn't actually start working after the changes I made :( *)
-      [%expect
-        {|
+      [%expect {|
     passed: 10
     failed: -10 |}])
+;;
+
+let%expect_test "test exceptions (simpler)" =
+  Deferred.List.iter configs ~f:(fun options ->
+      let%bind () =
+        run_code
+          ~options
+          [%str
+            exception Fail
+
+            let[@cold] fail () = ()
+            let[@cold] will_this_thing_raise () = raise Fail
+
+            let[@cold] main n =
+              try will_this_thing_raise n with
+              | Fail -> fail ()
+            ;;
+
+            let () = main ()]
+      in
+      (* FIXME: This didn't actually start working after the changes I made :( *)
+      [%expect {| |}])
 ;;

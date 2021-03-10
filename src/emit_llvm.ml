@@ -162,14 +162,17 @@ let emit ~ctx ~this_module (cmm : Cmm.phrase list) =
              end)
            in
            let ret_val = Cmm_to_llvm.compile_expression cfundecl.fun_body in
-           build_ret
-             (Cmm_to_llvm.promote_value_if_necessary_exn
-                ~msg:[%message "promoting return value"]
-                ~new_machtype:(Machtype Val)
-                ret_val
-             |> Cmm_to_llvm.llvm_value)
-             builder
-           |> (ignore : llvalue -> unit)
+           match ret_val.kind with
+           | Never_returns -> ()
+           | _ ->
+             build_ret
+               (Cmm_to_llvm.promote_value_if_necessary_exn
+                  ~msg:[%message "promoting return value"]
+                  ~new_machtype:(Machtype Val)
+                  ret_val
+               |> Cmm_to_llvm.llvm_value)
+               builder
+             |> (ignore : llvalue -> unit)
          with
         | exn ->
           let msg =
