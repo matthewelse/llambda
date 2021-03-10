@@ -45,6 +45,8 @@ let const_float ctx (size : 'size Ltype.Float_size.t) f : 'size Ltype.float t =
 
 let const_inttoptr ~ptr_type t = Llvm.const_inttoptr t (Ltype.to_llvm ptr_type)
 
+let const_pointer_null ptr_type = Llvm.const_pointer_null (Ltype.to_llvm ptr_type)
+
 let const_inline_asm ~typ ~assembly ~constraints ~has_side_effects ~should_align_stack =
   Llvm.const_inline_asm
     (Ltype.Func.to_llvm typ)
@@ -88,6 +90,12 @@ let build_pointercast ~new_type ~name ~builder t =
 let build_in_bounds_gep ~offsets ~name ~builder t =
   Llvm.build_in_bounds_gep t (Array.of_list offsets) name builder
 ;;
+
+let build_gep ~offsets ~name ~builder t =
+  Llvm.build_gep t (Array.of_list offsets) name builder
+;;
+let build_alloca ~name ~builder typ =
+  Llvm.build_alloca (Ltype.to_llvm typ) name builder
 
 let build_load ~name ~builder ptr = Llvm.build_load ptr name builder
 let build_store ~builder ~dst t = Llvm.build_store t dst builder

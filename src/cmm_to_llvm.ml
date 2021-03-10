@@ -1097,13 +1097,18 @@ module With_context (Context : Context) = struct
       (match block_terminator entry_bb with
       | None -> position_at_end entry_bb builder
       | Some terminator -> position_before terminator builder);
-      let ptr_ptr = build_alloca (pointer_type (i8_type ctx)) "alloc_ptr" builder in
-      let (_ : llvalue) =
-        build_call
-          (unwrap_fn Intrinsics.gcroot)
-          [| ptr_ptr; const_pointer_null (unwrap_type val_type) |]
-          ""
-          builder
+      let ptr_ptr =
+        Value.build_alloca
+          (Ltype.pointer_type (Ltype.int_type ctx I8))
+          ~name:"alloc_ptr"
+          ~builder
+      in
+      let (_ : unit Value.t) =
+        Value.build_call
+          Intrinsics.gcroot
+          ~args:Value.Args.(ptr_ptr @: Value.const_pointer_null val_type @: nil)
+          ~name:""
+          ~builder
       in
       position_at_end insertion_block builder;
       let bytes = 8 + (List.length data * 8) in
@@ -1122,38 +1127,55 @@ module With_context (Context : Context) = struct
           "caml_allocN"
       in
       let caml_alloc =
-        Llvm.declare_function
-          function_to_call
-          (function_type (unwrap_type void_type) [||])
-          this_module
+        Value.declare_function
+          ~name:function_to_call
+          ~typ:Ltype.Func.(returns void_type)
+          ~module_:this_module
       in
-      let (_ : llvalue) = build_call caml_alloc [||] "" builder in
-      let r15 = Intrinsics.read_register `r15 builder |> unwrap in
-      let ptr = build_gep r15 [| const_int 8 |> llvm_value |] "" builder in
-      let tag_value =
+      let (_ : unit Value.t) =
+        Value.build_call caml_alloc ~args:Value.Args.nil ~name:"" ~builder
+      in
+      let r15 = Intrinsics.read_register `r15 builder in
+      let ptr =
+        Value.build_gep r15 ~offsets:[ Value.const_int ctx I64 8 ] ~name:"" ~builder
+      in
+      let tag_value : [ `i64 ] Ltype.int Value.t =
         compile_expression tag
         |> promote_value_if_necessary_exn
              ~msg:[%message "calloc"]
              ~new_machtype:(Machtype Int)
         |> llvm_value
+        |> wrap
       in
-      let (_ : llvalue) = build_store ptr ptr_ptr builder in
+      let (_ : unit Value.t) = Value.build_store ptr ~dst:ptr_ptr ~builder in
       let tag_ptr = r15 in
       let tag_ptr =
-        build_pointercast tag_ptr (pointer_type (type_of tag_value)) "" builder
+        Value.build_pointercast
+          tag_ptr
+          ~new_type:(Ltype.pointer_type int_type)
+          ~name:""
+          ~builder
       in
-      let (_ : llvalue) = build_store tag_value tag_ptr builder in
+      let (_ : unit Value.t) = Value.build_store tag_value ~dst:tag_ptr ~builder in
       List.iteri data ~f:(fun i elem ->
           let elem_ptr =
-            build_in_bounds_gep ptr [| const_int (i * 8) |> llvm_value |] "gep" builder
+            Value.build_in_bounds_gep
+              ptr
+              ~offsets:[ Value.const_int ctx I64 (i * 8) ]
+              ~name:"gep"
+              ~builder
           in
           let value = compile_expression elem |> llvm_value in
           let elem_ptr =
-            build_pointercast elem_ptr (pointer_type (type_of value)) "" builder
+            Llvm.build_pointercast
+              (unwrap elem_ptr)
+              (pointer_type (type_of value))
+              ""
+              builder
           in
           let (_ : llvalue) = build_store value elem_ptr builder in
           ());
-      { kind = Machtype Val; value = `Stack ptr_ptr }
+      { kind = Machtype Val; value = `Stack (unwrap ptr_ptr) }
     | Calloc, _ -> assert false
     | Ccheckbound, [ upper_bound; index ] ->
       let upper_bound =

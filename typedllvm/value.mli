@@ -39,6 +39,10 @@ val const_inttoptr
   -> [ `i64 ] Ltype.int t
   -> 'kind Ltype.pointer t
 
+val const_pointer_null
+  : 'kind Ltype.pointer Ltype.t
+  -> 'kind Ltype.pointer t
+
 val build_inttoptr
   :  ptr_type:'kind Ltype.pointer Ltype.t
   -> name:string
@@ -60,6 +64,13 @@ val build_pointercast
   -> 'kind Ltype.pointer t
 
 val build_in_bounds_gep
+  :  offsets:_ Ltype.int t list
+  -> name:string
+  -> builder:builder
+  -> 'a Ltype.pointer t
+  -> 'a Ltype.pointer t
+
+val build_gep
   :  offsets:_ Ltype.int t list
   -> name:string
   -> builder:builder
@@ -143,6 +154,7 @@ val const_inline_asm
   -> should_align_stack:bool
   -> ('return, 'args) fn
 
+val build_alloca : name:string -> builder:builder -> 'a Ltype.t -> 'a Ltype.pointer t
 val build_load : name:string -> builder:builder -> 'a Ltype.pointer t -> 'a t
 val build_store : builder:builder -> dst:'a Ltype.pointer t -> 'a t -> unit t
 val mdnode : ctx:Llvm.llcontext -> string Ltype.md t list -> string list Ltype.md t

@@ -1,9 +1,3 @@
-# To-do list
-
-- [ ] get exception handling working
-- [ ] stable tests between macos and linux 
-- [ ] behavioural tests (actually run compiled/optimised code, compare behaviour to ocamlopt)
-
 ## LLVM Exception Handling
 
 Add three intrinsics to LLVM, reflecting the machine pseudo-instructions used in
@@ -69,3 +63,6 @@ fallthrough:
     ret i64 %result
 }
 ```
+
+This almost works, but we need to teach LLVM about the fact that we change the
+stack pointer somehow.
